@@ -1,0 +1,88 @@
+<!doctype html>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="left">
+          <img class="logo" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='46'><rect rx='6' width='240' height='46' fill='%235b6cff'/></svg>" alt="logo" />
+          <h1>Inventario Multinyectores</h1>
+          <div class="subtitle">Plataforma para gestionar inventarios, ventas y facturación</div>
+
+          <h3 style="margin-top:18px;margin-bottom:6px">Descripción general</h3>
+          <p class="meta">Inventario Multinyectores es una aplicación web diseñada para manejar el ciclo completo de ventas y stock: desde la creación y coste de productos, control de almacenes, facturación y reportes analíticos para la toma de decisiones.</p>
+
+          <h3 style="margin-top:16px;margin-bottom:6px">Módulos principales</h3>
+          <ul>
+            <li><strong>Productos:</strong> catálogo con múltiples precios, costos y estados (activo/archivado).</li>
+            <li><strong>Almacenes:</strong> gestión de existencias por ubicación.</li>
+            <li><strong>Ventas:</strong> crear ventas, aplicar pagos, generar facturas y notas de crédito.</li>
+            <li><strong>Clientes:</strong> historial de compras y datos de facturación.</li>
+            <li><strong>Reportes:</strong> ranking de ventas, alertas de stock bajo y análisis por categoría.</li>
+            <li><strong>Usuarios y roles:</strong> permisos por rol (admin, vendedor, lector).</li>
+          </ul>
+
+          <h3 style="margin-top:16px;margin-bottom:6px">Flujo típico</h3>
+          <ol style="color:var(--muted);line-height:1.6">
+            <li>Registrar productos y definir costos/precios por almacén.</li>
+            <li>Registrar clientes y crear ventas desde el POS o facturación.</li>
+            <li>Generar facturas y llevar el control de pagos.</li>
+            <li>Usar reportes para identificar top productos y alertas de stock.</li>
+          </ol>
+
+          <h3 style="margin-top:16px;margin-bottom:6px">Tecnología</h3>
+          <p class="meta"><strong>Backend:</strong> Node.js + Express + Sequelize (MySQL). <strong>Frontend:</strong> React (react-scripts). Opcional: docker-compose para despliegues.</p>
+
+          <h3 style="margin-top:16px;margin-bottom:6px">Credenciales de prueba</h3>
+          <p class="meta">Si instala la base de datos de ejemplo o crea usuarios, puede usar (ejemplo):</p>
+          <ul>
+            <li>Administrador: <strong>admin@example.com</strong> / <strong>Admin123!</strong></li>
+            <li>Vendedor: <strong>vendedor@example.com</strong> / <strong>Vendedor123!</strong></li>
+          </ul>
+
+          <h3 style="margin-top:16px;margin-bottom:6px">Requisitos y despliegue rápido</h3>
+          <ul>
+            <li>Servidor VPS Ubuntu 22.04+, Node.js 18/20 y MySQL.</li>
+            <li>Instalar dependencias: <code>npm install</code> en backend y frontend.</li>
+            <li>Construir frontend: <code>npm run build</code> y copiar <code>build/</code> a <code>/var/www/inventario</code>.</li>
+            <li>Ejecutar backend con <code>pm2 start app.js</code> y configurar proxy en nginx.</li>
+            <li>Obtener SSL con Let's Encrypt: <code>certbot --nginx</code>.</li>
+          </ul>
+
+          <a class="btn" href="#contact">Pedir ayuda para desplegar</a>
+          <footer style="margin-top:14px">Nota: cambie las credenciales por valores seguros antes de producción.</footer>
+        </div>
+
+        <div class="right">
+          <div style="background:#f3f4f6;padding:18px;border-radius:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div class="pill">Estado: Preparado</div>
+                <div style="margin-top:10px;font-weight:700">Subdominio: inventario.multinyectorescolombia.com</div>
+                <div style="color:var(--muted);margin-top:8px">Actualmente no hay VPS asociado. Este placeholder muestra información mientras prepara el servidor.</div>
+              </div>
+            </div>
+
+            <hr style="margin:14px 0;border:none;border-top:1px solid #e6e9ef">
+
+            <div>
+              <strong>Checklist mínimo para producción</strong>
+              <ol style="color:var(--muted);padding-left:18px">
+                <li>Crear VPS y actualizar A record del subdominio.</li>
+                <li>Instalar Node.js, MySQL y nginx; clonar el repositorio.</li>
+                <li>Configurar variables en <code>.env</code> (DB, JWT_SECRET, etc.).</li>
+                <li>Ejecutar migraciones y crear usuario admin.</li>
+                <li>Configurar backups periódicos de la base de datos.</li>
+              </ol>
+            </div>
+
+            <hr style="margin:14px 0;border:none;border-top:1px solid #e6e9ef">
+
+            <div style="font-size:14px;color:var(--muted)">
+              <strong>Soporte</strong>
+              <div style="margin-top:8px">Si desea que yo le prepare el VPS y deje todo en producción, responda con: "Desplegar en VPS" y le doy un script y pasos automáticos.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

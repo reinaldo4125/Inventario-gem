@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
+  <!-- Inyector de combustible -->
+  <defs>
+    <linearGradient id="metalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#c0c0c0;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#808080;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#606060;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2c3e50;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#34495e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Fondo con patrón -->
+  <circle cx="100" cy="80" r="3" fill="#004A99" opacity="0.1"/>
+  <circle cx="300" cy="200" r="2" fill="#E32636" opacity="0.1"/>
+  <circle cx="350" cy="100" r="1.5" fill="#1E73BE" opacity="0.1"/>
+  
+  <!-- Cuerpo principal del inyector -->
+  <rect x="180" y="80" width="40" height="140" rx="5" fill="url(#bodyGradient)" stroke="#2c3e50" stroke-width="2"/>
+  
+  <!-- Conexión eléctrica superior -->
+  <rect x="185" y="60" width="30" height="25" rx="3" fill="url(#metalGradient)" stroke="#606060" stroke-width="1"/>
+  <circle cx="200" cy="72" r="3" fill="#E32636"/>
+  
+  <!-- Boquilla del inyector -->
+  <polygon points="185,220 200,240 215,220" fill="url(#metalGradient)" stroke="#606060" stroke-width="1"/>
+  
+  <!-- Detalles del cuerpo -->
+  <line x1="185" y1="100" x2="215" y2="100" stroke="#1E73BE" stroke-width="2"/>
+  <line x1="185" y1="120" x2="215" y2="120" stroke="#1E73BE" stroke-width="1"/>
+  <line x1="185" y1="140" x2="215" y2="140" stroke="#1E73BE" stroke-width="1"/>
+  
+  <!-- Anillos O-ring -->
+  <ellipse cx="200" cy="110" rx="22" ry="3" fill="none" stroke="#27ae60" stroke-width="2"/>
+  <ellipse cx="200" cy="180" rx="22" ry="3" fill="none" stroke="#27ae60" stroke-width="2"/>
+  
+  <!-- Spray de combustible -->
+  <g opacity="0.6">
+    <line x1="200" y1="240" x2="195" y2="260" stroke="#3498db" stroke-width="1"/>
+    <line x1="200" y1="240" x2="200" y2="265" stroke="#3498db" stroke-width="2"/>
+    <line x1="200" y1="240" x2="205" y2="260" stroke="#3498db" stroke-width="1"/>
+  </g>
+  
+  <!-- Texto identificativo -->
+  <text x="200" y="290" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#004A99">INYECTOR</text>
+  <text x="200" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#666">Sistema de Inyección Electrónica</text>
+  
+  <!-- Elementos decorativos -->
+  <rect x="10" y="10" width="80" height="2" fill="#E32636" opacity="0.8"/>
+  <rect x="310" y="280" width="80" height="2" fill="#E32636" opacity="0.8"/>
+</svg>

@@ -1,0 +1,23 @@
+{
+  "development": {
+    "username": "root",
+    "password": "Salome2016.",
+    "database": "inventario",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "test": {
+    "username": "root",
+    "password": "Salome2016.",
+    "database": "inventario_test",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "production": {
+    "username": "root",
+    "password": "Salome2016.",
+    "database": "inventario",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  }
+}
