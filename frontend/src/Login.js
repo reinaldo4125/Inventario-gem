@@ -26,12 +26,6 @@ function Login({ onLogin }) {
       .catch(() => {});
   }, []);
 
-  const fillAdminCredentials = () => {
-    setCorreo('admin@example.com');
-    setPassword('Admin123!');
-    setError('');
-  };
-
   const handleSubmit = async e => {
     e.preventDefault();
     setError('');
@@ -98,10 +92,10 @@ function Login({ onLogin }) {
         )}
 
         <div style={{marginBottom:'16px'}}>
-          <label style={{display:'block',fontSize:'12px',fontWeight:'600',color:'#334155',marginBottom:'6px'}}>Correo electrónico</label>
+          <label style={{display:'block',fontSize:'12px',fontWeight:'600',color:'#334155',marginBottom:'6px'}}>Usuario o Correo electrónico</label>
           <input 
-            type="email" 
-            placeholder="admin@example.com" 
+            type="text" 
+            placeholder="admin" 
             value={correo} 
             onChange={e => setCorreo(e.target.value)} 
             required 
@@ -137,16 +131,6 @@ function Login({ onLogin }) {
         >
           {loading ? 'Iniciando sesión...' : 'Ingresar al Sistema'}
         </button>
-
-        <div style={{marginTop:'20px',paddingTop:'16px',borderTop:'1px solid #f1f5f9',textAlign:'center'}}>
-          <button 
-            type="button" 
-            onClick={fillAdminCredentials}
-            style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:'6px',padding:'8px 12px',fontSize:'12px',color:'#334155',cursor:'pointer',fontWeight:'500',width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:'6px'}}
-          >
-            <span>🔑</span> Autocompletar como Administrador (Demo)
-          </button>
-        </div>
       </form>
     </div>
   );

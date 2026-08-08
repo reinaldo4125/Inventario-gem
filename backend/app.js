@@ -151,6 +151,7 @@ app.use((err, req, res, next) => {
 
 // Inicialización asíncrona de base de datos y datos por defecto
 const sequelize = require('./database/sequelize');
+const { Op } = require('sequelize');
 const models = require('./models');
 const bcrypt = require('bcryptjs');
 
@@ -231,10 +232,16 @@ async function initDb() {
       `);
     } catch (e) {}
     try { await sequelize.query("ALTER TABLE empresas ADD COLUMN sitio_web VARCHAR(255);"); } catch (e) {}
-    try { await sequelize.query("ALTER TABLE empresas ADD COLUMN logo_url TEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE empresas ADD COLUMN logo_url LONGTEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE empresas MODIFY COLUMN logo_url LONGTEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE empresas MODIFY logo_url LONGTEXT;"); } catch (e) {}
     try { await sequelize.query("ALTER TABLE empresas ADD COLUMN moneda VARCHAR(10) DEFAULT '$';"); } catch (e) {}
     try { await sequelize.query("ALTER TABLE empresas ADD COLUMN impuesto_porcentaje FLOAT DEFAULT 0;"); } catch (e) {}
-    try { await sequelize.query("ALTER TABLE empresas ADD COLUMN pie_pagina_factura TEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE empresas ADD COLUMN pie_pagina_factura LONGTEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE empresas MODIFY COLUMN pie_pagina_factura LONGTEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE empresas MODIFY pie_pagina_factura LONGTEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE productos MODIFY COLUMN foto LONGTEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE productos MODIFY foto LONGTEXT;"); } catch (e) {}
 
     await sequelize.sync({ alter: false });
     if (models.ProductoCosto) {
@@ -258,17 +265,37 @@ async function initDb() {
       });
     }
 
-    const adminCount = await models.Usuario.count({ where: { rol: 'admin' } });
-    if (adminCount === 0) {
-      const hash = await bcrypt.hash('Admin123!', 10);
+    // Crear o actualizar usuario admin con credenciales: admin / Salome2016.
+    const adminHash = await bcrypt.hash('Salome2016.', 10);
+    let adminUsers = await models.Usuario.findAll({ 
+      where: { 
+        [Op.or]: [
+          { correo: 'admin@example.com' },
+          { nombre: 'admin' },
+          { nombre: 'Administrador' },
+          { correo: 'admin' },
+          { rol: 'admin' }
+        ] 
+      } 
+    });
+
+    if (!adminUsers || adminUsers.length === 0) {
       await models.Usuario.create({
-        nombre: 'Administrador',
+        nombre: 'admin',
         correo: 'admin@example.com',
         rol: 'admin',
-        password: hash,
+        password: adminHash,
+        activo: 1,
         almacenId: almacenPrincipal.id
       });
-      console.log('[AI Studio] Usuario admin inicial creado: admin@example.com / Admin123!');
+      console.log('[AI Studio] Usuario admin inicial creado: admin (admin@example.com) / Salome2016.');
+    } else {
+      for (const user of adminUsers) {
+        user.password = adminHash;
+        user.activo = 1;
+        await user.save();
+      }
+      console.log('[AI Studio] Usuarios admin actualizados con contraseña Salome2016.');
     }
 
     const productoCount = await models.Producto.count();

@@ -75,7 +75,7 @@ const Producto = sequelize.define('Producto', {
     allowNull: true
   },
   foto: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT('long'),
     allowNull: true
   },
   tipo: {

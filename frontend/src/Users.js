@@ -127,7 +127,9 @@ function Users({ usuario }) {
       errors.correo = 'Correo no válido';
     }
     if (!form.rol.trim()) errors.rol = 'El rol es obligatorio';
-    if (!form.almacenId) errors.almacenId = 'El almacén es obligatorio';
+    if (form.rol !== 'admin' && form.rol !== 'administrador' && !form.almacenId) {
+      errors.almacenId = 'El almacén es obligatorio';
+    }
     if (!editId) {
       if (!form.password || form.password.length < 6) {
         errors.password = 'La contraseña debe tener al menos 6 caracteres';
@@ -379,7 +381,9 @@ function Users({ usuario }) {
       <div style={{ marginBottom: 12, fontWeight: 600, color: '#2a4365', fontSize: 16 }}>
         {usuario.almacenNombre || (usuario.almacen && usuario.almacen.nombre) ? (
           <>Almacén Actual: <span style={{ color: '#3182ce' }}>{usuario.almacenNombre || usuario.almacen.nombre}</span></>
-        ) : null}
+        ) : (usuario.rol === 'admin' ? (
+          <>Almacén Actual: <span style={{ color: '#3182ce' }}>Todos los Almacenes (Acceso Global)</span></>
+        ) : null)}
       </div>
 
       <h2 className="section-title" style={{ fontSize: '24px', fontWeight: 'bold', color: '#1a365d', marginBottom: '16px' }}>
@@ -627,7 +631,7 @@ function Users({ usuario }) {
 
             <div>
               <label htmlFor="almacenId" style={{ display: 'block', fontWeight: 600, fontSize: '13px', color: '#2d3748', marginBottom: '6px' }}>
-                Almacén Asignado <span style={{ color: '#e53e3e' }}>*</span>
+                Almacén Asignado {(form.rol === 'admin' || form.rol === 'administrador') ? <span style={{ color: '#718096', fontWeight: 400, fontSize: '12px' }}>(Opcional)</span> : <span style={{ color: '#e53e3e' }}>*</span>}
               </label>
               <select 
                 id="almacenId" 
@@ -635,10 +639,14 @@ function Users({ usuario }) {
                 value={form.almacenId} 
                 onChange={handleChange} 
                 className="input" 
-                required
+                required={form.rol !== 'admin' && form.rol !== 'administrador'}
                 style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #cbd5e0', background: '#fff' }}
               >
-                <option value="">Selecciona un almacén</option>
+                <option value="">
+                  {(form.rol === 'admin' || form.rol === 'administrador') 
+                    ? 'Todos los Almacenes / Acceso Global' 
+                    : 'Selecciona un almacén'}
+                </option>
                 {almacenes.map(a => (
                   <option key={a.id} value={a.id}>{a.nombre}</option>
                 ))}
@@ -952,7 +960,7 @@ function Users({ usuario }) {
                   </td>
                   <td style={{ padding: '12px', fontSize: '13px' }}>
                     <div style={{ fontWeight: 600, color: '#2d3748' }}>
-                      {u.almacenNombre || <span style={{ color: '#a0aec0' }}>General</span>}
+                      {u.almacenNombre || (u.rol === 'admin' ? <span style={{ color: '#2b6cb0' }}>Todos (Acceso Global)</span> : <span style={{ color: '#a0aec0' }}>General</span>)}
                     </div>
                     {u.comision ? (
                       <div style={{ fontSize: '12px', color: '#2b6cb0', fontWeight: 600 }}>

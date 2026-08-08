@@ -43,7 +43,7 @@ const Empresa = sequelize.define('Empresa', {
     allowNull: true
   },
   logo_url: {
-    type: DataTypes.TEXT,
+    type: DataTypes.TEXT('long'),
     allowNull: true
   },
   moneda: {
@@ -55,7 +55,7 @@ const Empresa = sequelize.define('Empresa', {
     defaultValue: 0
   },
   pie_pagina_factura: {
-    type: DataTypes.TEXT,
+    type: DataTypes.TEXT('long'),
     allowNull: true
   }
 }, {

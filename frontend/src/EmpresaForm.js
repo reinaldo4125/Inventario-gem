@@ -75,17 +75,39 @@ function EmpresaForm() {
     setEmpresa(prev => ({ ...prev, [name]: value }));
   };
 
-  // Manejador de carga de archivo de logo local (convertir a base64)
+  // Manejador de carga de archivo de logo local (convertir a base64 optimizado)
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setError('El logo debe ser una imagen menor a 2 MB.');
+      if (file.size > 5 * 1024 * 1024) {
+        setError('El logo debe ser una imagen menor a 5 MB.');
         return;
       }
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setEmpresa(prev => ({ ...prev, logo_url: reader.result }));
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxDim = 600;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          const resizedBase64 = canvas.toDataURL('image/png');
+          setEmpresa(prev => ({ ...prev, logo_url: resizedBase64 }));
+        };
+        img.src = event.target.result;
       };
       reader.readAsDataURL(file);
     }
