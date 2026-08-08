@@ -1,12 +1,16 @@
 /* --- RESPONSIVE DESIGN GLOBAL --- */
+*, *:before, *:after {
+  box-sizing: border-box;
+}
+
 @media (max-width: 900px) {
-  .usuarios-container, .productos-container, .card {
+  .usuarios-container, .productos-container, .card:not(.modal-card) {
     padding: 18px 6px !important;
     max-width: 100vw !important;
     margin: 12px 0 !important;
     border-radius: 10px !important;
   }
-  .card {
+  .card:not(.modal-card) {
     box-shadow: 0 2px 8px #0001 !important;
   }
   .section-title {
@@ -15,7 +19,7 @@
   }
 }
 @media (max-width: 700px) {
-  .usuarios-table, .usuarios-table.card, .productos-table, .card {
+  .usuarios-table, .usuarios-table.card, .productos-table, .card:not(.modal-card) {
     font-size: 0.95rem !important;
     overflow-x: auto !important;
     display: block !important;
@@ -32,6 +36,8 @@
   .input, select, textarea {
     font-size: 0.98rem !important;
     padding: 7px 8px !important;
+    max-width: 100%;
+    box-sizing: border-box;
   }
   .btn, .btn-principal, .btn-peligro {
     font-size: 0.98rem !important;
@@ -40,7 +46,7 @@
   }
 }
 @media (max-width: 500px) {
-  .usuarios-container, .productos-container, .card {
+  .usuarios-container, .productos-container, .card:not(.modal-card) {
     padding: 6px 2px !important;
     margin: 4px 0 !important;
     border-radius: 6px !important;

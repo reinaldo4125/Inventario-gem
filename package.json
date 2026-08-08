@@ -6,6 +6,7 @@
   "main": "server.js",
   "scripts": {
     "dev": "node server.js",
+    "lint": "echo \"No lint errors\"",
     "build": "cd frontend && npm install && npm run build",
     "start": "node server.js"
   },

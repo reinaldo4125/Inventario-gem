@@ -4,7 +4,7 @@ import FieldError from './components/FieldError';
 import { 
   MdEdit, MdDelete, MdSave, MdCancel, MdSearch, MdContentCopy, 
   MdFileDownload, MdWarning, MdInventory, MdAdd, MdRefresh,
-  MdPlace, MdLocalShipping, MdAttachMoney
+  MdPlace, MdLocalShipping, MdAttachMoney, MdHistory
 } from 'react-icons/md';
 import { FaWarehouse, FaBoxOpen, FaLayerGroup, FaTag } from 'react-icons/fa';
 
@@ -904,7 +904,7 @@ function Productos({ usuario }) {
                               onClick={() => handleVerKardex(p)} 
                               title="Ver Bitácora Kardex / Historial de Movimientos"
                             >
-                              📋 Kardex
+                              <MdHistory size={16} />
                             </button>
 
                             <button 
@@ -948,17 +948,17 @@ function Productos({ usuario }) {
       {/* MODAL EDITAR / CREAR PRODUCTO */}
       {isAdmin && showModal && (
         <div className="modal-backdrop">
-          <div className="modal-card card" style={{ maxWidth: '800px', width: '90%' }}>
+          <div className="modal-card card" style={{ maxWidth: '800px', width: '100%', boxSizing: 'border-box' }}>
             <h3 style={{ marginTop: 0, color: form.tipo === 'servicio' ? '#6b46c1' : '#2b6cb0', borderBottom: '2px solid #ebf8ff', paddingBottom: '10px' }}>
               {productoEdit 
                 ? (form.tipo === 'servicio' ? '✏️ Editar Servicio / Mano de Obra' : '✏️ Editar Producto') 
                 : (form.tipo === 'servicio' ? '🛠️ Nuevo Servicio / Mano de Obra' : '📦 Nuevo Producto en Catálogo')}
             </h3>
 
-            <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px', marginTop: '16px' }}>
+            <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', marginTop: '16px', width: '100%', boxSizing: 'border-box' }}>
               
               {/* TIPO PRODUCTO VS SERVICIO RADIO SELECTOR */}
-              <div style={{ gridColumn: 'span 2', display: 'flex', gap: '16px', background: '#f7fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', alignItems: 'center' }}>
+              <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: '10px 16px', background: '#f7fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', alignItems: 'center', width: '100%', boxSizing: 'border-box' }}>
                 <span style={{ fontWeight: 600, fontSize: '13px', color: '#2d3748' }}>Tipo de Item:</span>
                 <label style={{ fontWeight: 600, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#2b6cb0' }}>
                   <input 
@@ -1031,7 +1031,7 @@ function Productos({ usuario }) {
                 <input name="modelo" className="input" value={form.modelo} onChange={handleChange} placeholder="Ej: Hilux 1KD-FTV / General" />
               </div>
 
-              <div className="form-field" style={{ gridColumn: 'span 2' }}>
+              <div className="form-field" style={{ gridColumn: '1 / -1' }}>
                 <label style={{ fontWeight: 600 }}>Compatibilidad de Vehículos / Observaciones</label>
                 <input name="compatibilidad" className="input" value={form.compatibilidad} onChange={handleChange} placeholder="Ej: Válido para todos los motores Diesel Common Rail" />
               </div>
@@ -1085,7 +1085,7 @@ function Productos({ usuario }) {
               </div>
 
               {/* SECCIÓN DE PRECIOS & COSTOS */}
-              <div style={{ gridColumn: 'span 2', background: '#f7fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+              <div style={{ gridColumn: '1 / -1', background: '#f7fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: '#4a5568' }}>Costo Compra ($)</label>
                   <input ref={costoRef} name="costo" className="input" defaultValue={form.costo} placeholder="Costo" type="text" inputMode="numeric" />
@@ -1105,13 +1105,13 @@ function Productos({ usuario }) {
               </div>
 
               {marginVal !== null && (
-                <div style={{ gridColumn: 'span 2', fontSize: '13px', color: Number(marginVal) >= 20 ? '#276749' : '#c53030', fontWeight: 600 }}>
+                <div style={{ gridColumn: '1 / -1', fontSize: '13px', color: Number(marginVal) >= 20 ? '#276749' : '#c53030', fontWeight: 600 }}>
                   📈 Margen estimado al detal: {marginVal}%
                 </div>
               )}
 
               {/* FOTO */}
-              <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', width: '100%', boxSizing: 'border-box' }}>
                 <div>
                   <label style={{ fontWeight: 600, display: 'block' }}>Fotografía del Repuesto</label>
                   <input type="file" accept="image/*" onChange={handleFile} />
@@ -1119,9 +1119,9 @@ function Productos({ usuario }) {
                 {preview && <img src={preview} alt="Vista Previa" style={{ height: '50px', borderRadius: '6px', border: '1px solid #cbd5e0' }} />}
               </div>
 
-              {formError && <div className="alert alert-error" style={{ gridColumn: 'span 2' }}>{formError}</div>}
+              {formError && <div className="alert alert-error" style={{ gridColumn: '1 / -1' }}>{formError}</div>}
 
-              <div style={{ gridColumn: 'span 2', display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
+              <div style={{ gridColumn: '1 / -1', display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'flex-end', marginTop: '12px', width: '100%', boxSizing: 'border-box' }}>
                 <button type="button" className="btn btn-secundario" onClick={handleCancelEdit}>Cancelar</button>
                 <button type="submit" disabled={loading} className="btn btn-principal" style={{ backgroundColor: '#3182ce' }}>
                   {loading ? 'Guardando...' : 'Guardar Producto'}

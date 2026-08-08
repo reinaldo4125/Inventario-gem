@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const sequelize = require('../database/sequelize');
 const { 
   Cliente, Producto, Venta, DetalleVenta, Factura, 
-  DetalleFactura, Almacen, ProductoAlmacen, Kardex, Caja, Usuario 
+  DetalleFactura, Almacen, ProductoAlmacen, ProductoCosto, DetalleTraslado, Kardex, Caja, Usuario 
 } = require('../models');
 const { Op } = require('sequelize');
 const fs = require('fs');
@@ -70,22 +71,24 @@ router.post('/seed-stress', auth, async (req, res) => {
 
     // 1. Crear Clientes de Prueba
     const clientesData = [];
+    const nowTs = Date.now();
     for (let i = 1; i <= Number(cantidadClientes); i++) {
+      const docNum = `${nowTs.toString().slice(-6)}${i}${Math.floor(1000 + Math.random() * 9000)}`;
       clientesData.push({
         almacenId,
-        nombre: `[PRUEBA] Cliente Test ${i}_${Date.now()}`,
+        nombre: `[PRUEBA] Cliente Test ${i}_${nowTs}_${Math.floor(Math.random() * 1000)}`,
         empresa: `Empresa Pruebas ${i}`,
         tipo_cliente: i % 3 === 0 ? 'Mayorista' : i % 2 === 0 ? 'Taller' : 'Detal',
-        documento: `999${Math.floor(10000000 + Math.random() * 90000000)}`,
+        documento: docNum,
         tipo_documento: 'NIT',
         telefono: `300${Math.floor(1000000 + Math.random() * 9000000)}`,
-        email: `test_cliente_${i}_${Date.now()}@prueba.com`,
+        correo: `test_cliente_${nowTs}_${i}_${Math.floor(Math.random() * 1000)}@prueba.com`,
         direccion: `Calle Pruebas #${i}-10`,
         monto_credito: 1000000,
         estado: 'Activo'
       });
     }
-    const clientesCreados = await Cliente.bulkCreate(clientesData, { returning: true });
+    const clientesCreados = await Cliente.bulkCreate(clientesData, { ignoreDuplicates: true, returning: true });
 
     // 2. Crear Productos de Prueba
     const categorias = ['Inyectores', 'Bombas', 'Empaques', 'Sensores', 'Repuestos', 'Servicios'];
@@ -95,24 +98,28 @@ router.post('/seed-stress', auth, async (req, res) => {
     for (let i = 1; i <= Number(cantidadProductos); i++) {
       const precioUnit = Math.floor(20000 + Math.random() * 500000);
       const costoUnit = Math.floor(precioUnit * 0.6);
+      const esServicio = i % 5 === 0;
 
       productosData.push({
-        nombre: `[PRUEBA] Producto Test ${i}_${Math.floor(Math.random()*1000)}`,
-        descripcion: `Descripción del producto de prueba estrés #${i}`,
-        categoria: categorias[i % categorias.length],
+        nombre: `[PRUEBA] ${esServicio ? 'Servicio' : 'Producto'} Test ${i}_${nowTs}_${Math.floor(Math.random() * 1000)}`,
+        descripcion: `Descripción de prueba estrés #${i}`,
+        categoria: esServicio ? 'Servicios' : categorias[i % categorias.length],
         marca: marcas[i % marcas.length],
         modelo: `MOD-${100 + i}`,
-        codigo_oem: `OEM-${888000 + i}`,
-        stock: Math.floor(10 + Math.random() * 200),
+        codigo_oem: `OEM-${nowTs.toString().slice(-6)}-${i}-${Math.floor(Math.random() * 1000)}`,
+        stock: esServicio ? 9999 : Math.floor(10 + Math.random() * 200),
         stock_minimo: 5,
+        precio: precioUnit,
         precio_detal: precioUnit,
+        precio_mayor: Math.floor(precioUnit * 0.85),
         precio_mayorista: Math.floor(precioUnit * 0.85),
         precio_taller: Math.floor(precioUnit * 0.90),
         costo: costoUnit,
-        ubicacion: `Pasillo A-${i % 10}`
+        tipo: esServicio ? 'servicio' : 'producto',
+        ubicacion_bodega: `Pasillo A-${i % 10}`
       });
     }
-    const productosCreados = await Producto.bulkCreate(productosData, { returning: true });
+    const productosCreados = await Producto.bulkCreate(productosData, { ignoreDuplicates: true, returning: true });
 
     // Asignar stock en ProductoAlmacen
     const prodAlmacenData = productosCreados.map(p => ({
@@ -159,18 +166,13 @@ router.post('/seed-stress', auth, async (req, res) => {
 
       const nuevaVenta = await Venta.create({
         clienteId: clienteRandom.id,
-        cliente: clienteRandom.nombre,
-        tipo_venta: clienteRandom.tipo_cliente,
-        metodo_pago: metodo,
+        metodoPago: metodo,
         subtotal: subtotalVenta,
         descuento: 0,
         total: subtotalVenta,
-        monto_pagado: metodo === 'Credito' ? 0 : subtotalVenta,
-        cambio: 0,
         almacenId,
-        vendedor: req.user?.nombre || 'Vendedor Test',
+        vendedor: 'Vendedor Test',
         estado: metodo === 'Credito' ? 'Pendiente' : 'Pagada',
-        esCotizacion: false,
         fecha: fechaVenta
       });
 
@@ -188,7 +190,7 @@ router.post('/seed-stress', auth, async (req, res) => {
         almacenId,
         tipo: 'Salida',
         cantidad: item.cantidad,
-        concepto: `Venta Pruebas Estrés #${nuevaVenta.id}`,
+        origen_destino: `Venta Pruebas Estrés #${nuevaVenta.id}`,
         usuario: req.user?.nombre || 'Tester',
         fecha: fechaVenta
       }));
@@ -280,42 +282,92 @@ router.get('/benchmark', auth, async (req, res) => {
 // Limpiar todos los datos generados durante las Pruebas de Estrés
 router.delete('/clean-stress', auth, async (req, res) => {
   try {
-    // Eliminar Clientes de prueba
-    const clientesTest = await Cliente.findAll({ where: { nombre: { [Op.like]: '%[PRUEBA]%' } } });
-    const clienteIds = clientesTest.map(c => c.id);
-
-    // Eliminar Productos de prueba
-    const productosTest = await Producto.findAll({ where: { nombre: { [Op.like]: '%[PRUEBA]%' } } });
-    const productoIds = productosTest.map(p => p.id);
-
-    // Eliminar Ventas de clientes/productos test
-    const ventasTest = await Venta.findAll({
+    // 1. Identificar Clientes de prueba
+    const clientesTest = await Cliente.findAll({
       where: {
         [Op.or]: [
-          { clienteId: { [Op.in]: clienteIds.length ? clienteIds : [0] } },
-          { cliente: { [Op.like]: '%[PRUEBA]%' } }
+          { nombre: { [Op.like]: '%[PRUEBA]%' } },
+          { empresa: { [Op.like]: '%Empresa Pruebas%' } },
+          { correo: { [Op.like]: '%@prueba.com%' } }
         ]
+      }
+    });
+    const clienteIds = clientesTest.map(c => c.id);
+
+    // 2. Identificar Productos de prueba
+    const productosTest = await Producto.findAll({
+      where: {
+        [Op.or]: [
+          { nombre: { [Op.like]: '%[PRUEBA]%' } },
+          { descripcion: { [Op.like]: '%prueba estrés%' } },
+          { codigo_oem: { [Op.like]: '%OEM-%' } }
+        ]
+      }
+    });
+    const productoIds = productosTest.map(p => p.id);
+
+    // 3. Identificar Ventas de prueba
+    const condicionesVentas = [{ vendedor: 'Vendedor Test' }];
+    if (clienteIds.length > 0) {
+      condicionesVentas.push({ clienteId: { [Op.in]: clienteIds } });
+    }
+
+    const ventasTest = await Venta.findAll({
+      where: {
+        [Op.or]: condicionesVentas
       }
     });
     const ventaIds = ventasTest.map(v => v.id);
 
-    if (ventaIds.length) {
-      await DetalleVenta.destroy({ where: { ventaId: { [Op.in]: ventaIds } } });
-      await Venta.destroy({ where: { id: { [Op.in]: ventaIds } } });
+    const isSqlite = sequelize.options.dialect === 'sqlite';
+
+    if (isSqlite) {
+      await sequelize.query('PRAGMA foreign_keys = OFF;');
     }
 
-    if (productoIds.length) {
-      await ProductoAlmacen.destroy({ where: { productoId: { [Op.in]: productoIds } } });
-      await Kardex.destroy({ where: { productoId: { [Op.in]: productoIds } } });
-      await Producto.destroy({ where: { id: { [Op.in]: productoIds } } });
-    }
+    try {
+      // Eliminar detalles de ventas
+      const detVentaConditions = [];
+      if (ventaIds.length > 0) detVentaConditions.push({ ventaId: { [Op.in]: ventaIds } });
+      if (productoIds.length > 0) detVentaConditions.push({ productoId: { [Op.in]: productoIds } });
 
-    if (clienteIds.length) {
-      await Cliente.destroy({ where: { id: { [Op.in]: clienteIds } } });
-    }
+      if (detVentaConditions.length > 0) {
+        await DetalleVenta.destroy({ where: { [Op.or]: detVentaConditions } });
+      }
 
-    // Limpiar también kardex con concepto de prueba
-    await Kardex.destroy({ where: { concepto: { [Op.like]: '%Pruebas Estrés%' } } });
+      // Eliminar ventas
+      if (ventaIds.length > 0) {
+        await Venta.destroy({ where: { id: { [Op.in]: ventaIds } } });
+      }
+
+      // Eliminar relaciones de producto
+      if (productoIds.length > 0) {
+        await ProductoAlmacen.destroy({ where: { productoId: { [Op.in]: productoIds } } });
+        await Kardex.destroy({ where: { productoId: { [Op.in]: productoIds } } });
+        if (ProductoCosto) await ProductoCosto.destroy({ where: { productoId: { [Op.in]: productoIds } } });
+        if (DetalleTraslado) await DetalleTraslado.destroy({ where: { productoId: { [Op.in]: productoIds } } });
+        await Producto.destroy({ where: { id: { [Op.in]: productoIds } } });
+      }
+
+      // Eliminar clientes
+      if (clienteIds.length > 0) {
+        await Cliente.destroy({ where: { id: { [Op.in]: clienteIds } } });
+      }
+
+      // Limpiar Kardex por origen_destino
+      await Kardex.destroy({
+        where: {
+          [Op.or]: [
+            { origen_destino: { [Op.like]: '%Pruebas Estrés%' } },
+            { origen_destino: { [Op.like]: '%[PRUEBA]%' } }
+          ]
+        }
+      });
+    } finally {
+      if (isSqlite) {
+        await sequelize.query('PRAGMA foreign_keys = ON;');
+      }
+    }
 
     res.json({
       exito: true,
@@ -327,6 +379,7 @@ router.delete('/clean-stress', auth, async (req, res) => {
       }
     });
   } catch (err) {
+    console.error('Error al limpiar datos de prueba:', err);
     res.status(500).json({ error: 'Error al limpiar datos de prueba: ' + err.message });
   }
 });

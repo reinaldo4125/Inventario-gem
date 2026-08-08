@@ -10,7 +10,7 @@ import {
   MdPrint, MdStore, MdAttachMoney, MdShowChart, MdDateRange, MdMoreVert,
   MdClose, MdInfo, MdLocalShipping, MdCreditCard, MdAccountBalanceWallet
 } from 'react-icons/md';
-import { FaFileExcel, FaFilePdf, FaPlus, FaShoppingBag, FaUserCheck, FaWarehouse } from 'react-icons/fa';
+import { FaFileExcel, FaFilePdf, FaPlus, FaShoppingBag, FaUserCheck, FaWarehouse, FaFileInvoiceDollar } from 'react-icons/fa';
 
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
