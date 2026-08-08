@@ -1085,22 +1085,22 @@ function Productos({ usuario }) {
               </div>
 
               {/* SECCIÓN DE PRECIOS & COSTOS */}
-              <div style={{ gridColumn: '1 / -1', background: '#f7fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#4a5568' }}>Costo Compra ($)</label>
-                  <input ref={costoRef} name="costo" className="input" defaultValue={form.costo} placeholder="Costo" type="text" inputMode="numeric" />
+              <div style={{ gridColumn: '1 / -1', background: '#f7fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', width: '100%', boxSizing: 'border-box' }}>
+                <div style={{ width: '100%', boxSizing: 'border-box' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#4a5568', display: 'block', marginBottom: '4px' }}>Costo Compra ($)</label>
+                  <input ref={costoRef} name="costo" className="input" defaultValue={form.costo} placeholder="Costo" type="text" inputMode="numeric" style={{ width: '100%', boxSizing: 'border-box' }} />
                 </div>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#2b6cb0' }}>Precio Detal ($)</label>
-                  <input ref={precioDetalRef} name="precio_detal" className="input" defaultValue={form.precio_detal} placeholder="Detal" type="text" inputMode="numeric" />
+                <div style={{ width: '100%', boxSizing: 'border-box' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#2b6cb0', display: 'block', marginBottom: '4px' }}>Precio Detal ($)</label>
+                  <input ref={precioDetalRef} name="precio_detal" className="input" defaultValue={form.precio_detal} placeholder="Detal" type="text" inputMode="numeric" style={{ width: '100%', boxSizing: 'border-box' }} />
                 </div>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#2d3748' }}>Precio Mayor ($)</label>
-                  <input ref={precioMayorRef} name="precio_mayor" className="input" defaultValue={form.precio_mayor} placeholder="Mayorista" type="text" inputMode="numeric" />
+                <div style={{ width: '100%', boxSizing: 'border-box' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#2d3748', display: 'block', marginBottom: '4px' }}>Precio Mayor ($)</label>
+                  <input ref={precioMayorRef} name="precio_mayor" className="input" defaultValue={form.precio_mayor} placeholder="Mayorista" type="text" inputMode="numeric" style={{ width: '100%', boxSizing: 'border-box' }} />
                 </div>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#2d3748' }}>Precio Almacén ($)</label>
-                  <input ref={precioAlmacenRef} name="precio_almacen" className="input" defaultValue={form.precio_almacen} placeholder="Almacén" type="text" inputMode="numeric" />
+                <div style={{ width: '100%', boxSizing: 'border-box' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#2d3748', display: 'block', marginBottom: '4px' }}>Precio Almacén ($)</label>
+                  <input ref={precioAlmacenRef} name="precio_almacen" className="input" defaultValue={form.precio_almacen} placeholder="Almacén" type="text" inputMode="numeric" style={{ width: '100%', boxSizing: 'border-box' }} />
                 </div>
               </div>
 
