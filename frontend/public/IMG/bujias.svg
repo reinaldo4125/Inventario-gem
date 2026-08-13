@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);">
+  <!-- Bujía de encendido -->
+  <defs>
+    <linearGradient id="sparkPlugGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ecf0f1;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#bdc3c7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#95a5a6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="ceramicGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ecf0f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d5dbdb;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Fondo con patrón -->
+  <circle cx="80" cy="60" r="3" fill="#004A99" opacity="0.1"/>
+  <circle cx="320" cy="200" r="2" fill="#E32636" opacity="0.1"/>
+  <circle cx="350" cy="80" r="1.5" fill="#1E73BE" opacity="0.1"/>
+  
+  <!-- Rosca superior (conexión) -->
+  <rect x="185" y="60" width="30" height="25" rx="3" fill="url(#sparkPlugGradient)" stroke="#7f8c8d" stroke-width="1"/>
+  
+  <!-- Terminal superior -->
+  <rect x="190" y="45" width="20" height="20" rx="2" fill="#2c3e50" stroke="#1b2631" stroke-width="1"/>
+  <circle cx="200" cy="55" r="3" fill="#E32636"/>
+  
+  <!-- Cuerpo hexagonal -->
+  <polygon points="180,85 185,90 185,110 180,115 220,115 215,110 215,90 220,85" 
+           fill="url(#sparkPlugGradient)" stroke="#7f8c8d" stroke-width="2"/>
+  
+  <!-- Aislante cerámico -->
+  <rect x="188" y="115" width="24" height="80" rx="2" fill="url(#ceramicGradient)" stroke="#bdc3c7" stroke-width="1"/>
+  
+  <!-- Líneas del aislante -->
+  <g stroke="#95a5a6" stroke-width="0.5">
+    <line x1="190" y1="125" x2="210" y2="125"/>
+    <line x1="190" y1="135" x2="210" y2="135"/>
+    <line x1="190" y1="145" x2="210" y2="145"/>
+    <line x1="190" y1="155" x2="210" y2="155"/>
+    <line x1="190" y1="165" x2="210" y2="165"/>
+    <line x1="190" y1="175" x2="210" y2="175"/>
+    <line x1="190" y1="185" x2="210" y2="185"/>
+  </g>
+  
+  <!-- Carcasa metálica inferior -->
+  <rect x="185" y="195" width="30" height="30" rx="2" fill="#34495e" stroke="#2c3e50" stroke-width="1"/>
+  
+  <!-- Electrodo central -->
+  <rect x="198" y="55" width="4" height="170" fill="#2c3e50"/>
+  <circle cx="200" cy="225" r="2" fill="#e74c3c"/>
+  
+  <!-- Electrodo de masa -->
+  <rect x="185" y="220" width="15" height="4" fill="#34495e"/>
+  <rect x="182" y="218" width="4" height="8" fill="#34495e"/>
+  
+  <!-- Chispa eléctrica -->
+  <g opacity="0.8">
+    <path d="M 200 223 Q 188 220 185 224" stroke="#f1c40f" stroke-width="2" fill="none"/>
+    <circle cx="200" cy="223" r="1" fill="#f39c12"/>
+    <circle cx="185" cy="224" r="1" fill="#f39c12"/>
+    
+    <!-- Efectos de chispa -->
+    <circle cx="192" cy="221" r="0.5" fill="#fff" opacity="0.9"/>
+    <circle cx="195" cy="223" r="0.5" fill="#fff" opacity="0.7"/>
+    <circle cx="188" cy="222" r="0.5" fill="#fff" opacity="0.8"/>
+  </g>
+  
+  <!-- Gap (separación) -->
+  <text x="150" y="230" font-family="Arial, sans-serif" font-size="8" fill="#34495e">0.7mm</text>
+  <line x1="155" y1="224" x2="183" y2="224" stroke="#34495e" stroke-width="0.5" stroke-dasharray="2,1"/>
+  
+  <!-- Marca de la bujía -->
+  <rect x="190" y="130" width="20" height="10" rx="1" fill="#E32636"/>
+  <text x="200" y="137" text-anchor="middle" font-family="Arial, sans-serif" font-size="6" fill="#fff" font-weight="bold">NGK</text>
+  
+  <!-- Especificaciones -->
+  <text x="230" y="100" font-family="Arial, sans-serif" font-size="10" fill="#7f8c8d">14mm</text>
+  <text x="230" y="150" font-family="Arial, sans-serif" font-size="10" fill="#7f8c8d">Resistor</text>
+  
+  <!-- Rosca -->
+  <g stroke="#7f8c8d" stroke-width="0.5" opacity="0.6">
+    <line x1="185" y1="200" x2="215" y2="200"/>
+    <line x1="185" y1="205" x2="215" y2="205"/>
+    <line x1="185" y1="210" x2="215" y2="210"/>
+    <line x1="185" y1="215" x2="215" y2="215"/>
+  </g>
+  
+  <!-- Texto identificativo -->
+  <text x="200" y="260" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#004A99">BUJÍA</text>
+  <text x="200" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#666">Bujía de Encendido</text>
+  
+  <!-- Elementos decorativos -->
+  <rect x="10" y="10" width="80" height="2" fill="#E32636" opacity="0.8"/>
+  <rect x="310" y="280" width="80" height="2" fill="#E32636" opacity="0.8"/>
+  
+  <!-- Temperatura de funcionamiento -->
+  <text x="200" y="275" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#e67e22">500-850°C</text>
+</svg>

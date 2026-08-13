@@ -1,0 +1,1 @@
+ALTER TABLE usuarios ADD COLUMN almacenId INT NULL, ADD CONSTRAINT fk_usuario_almacen FOREIGN KEY (almacenId) REFERENCES almacenes(id);

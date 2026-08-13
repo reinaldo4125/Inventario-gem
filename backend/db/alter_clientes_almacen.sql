@@ -1,0 +1,1 @@
+ALTER TABLE clientes ADD COLUMN almacenId INT NULL AFTER notas, ADD CONSTRAINT fk_cliente_almacen FOREIGN KEY (almacenId) REFERENCES almacenes(id);

@@ -1,0 +1,45 @@
+<svg width="200" height="80" viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fondo del logo -->
+  <rect width="200" height="80" rx="8" fill="#004A99"/>
+  
+  <!-- Elemento gráfico - Inyector estilizado -->
+  <g transform="translate(15, 15)">
+    <!-- Cuerpo del inyector -->
+    <rect x="0" y="10" width="8" height="40" rx="2" fill="#E32636"/>
+    <rect x="2" y="8" width="4" height="4" fill="#1E73BE"/>
+    
+    <!-- Conector -->
+    <rect x="8" y="15" width="12" height="6" rx="3" fill="#1E73BE"/>
+    <circle cx="20" r="2" cy="18" fill="#E32636"/>
+    
+    <!-- Spray pattern -->
+    <g opacity="0.8">
+      <circle cx="4" cy="52" r="1" fill="#FFFFFF"/>
+      <circle cx="7" cy="54" r="0.8" fill="#FFFFFF"/>
+      <circle cx="1" cy="55" r="0.6" fill="#FFFFFF"/>
+      <circle cx="5" cy="57" r="0.5" fill="#FFFFFF"/>
+    </g>
+  </g>
+  
+  <!-- Texto principal -->
+  <text x="50" y="35" font-family="Montserrat, sans-serif" font-weight="800" font-size="18" fill="#FFFFFF">
+    MULTINYECTORES
+  </text>
+  
+  <!-- Subtítulo -->
+  <text x="50" y="52" font-family="Poppins, sans-serif" font-weight="500" font-size="10" fill="#1E73BE" opacity="0.9">
+    INYECCIÓN ELECTRÓNICA
+  </text>
+  
+  <!-- Línea decorativa -->
+  <line x1="50" y1="57" x2="180" y2="57" stroke="#E32636" stroke-width="2"/>
+  
+  <!-- Elementos técnicos -->
+  <g transform="translate(160, 20)">
+    <!-- Circuito estilizado -->
+    <rect x="0" y="0" width="15" height="2" fill="#1E73BE" opacity="0.6"/>
+    <rect x="5" y="2" width="2" height="8" fill="#1E73BE" opacity="0.6"/>
+    <rect x="10" y="5" width="8" height="2" fill="#1E73BE" opacity="0.6"/>
+    <circle cx="18" cy="6" r="2" fill="#E32636" opacity="0.8"/>
+  </g>
+</svg>

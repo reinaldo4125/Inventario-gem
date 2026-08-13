@@ -1,0 +1,8 @@
+{
+  "name": "Inventario Multinyectores",
+  "description": "Sistema de gestión de inventarios, ventas, almacenes y facturación.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

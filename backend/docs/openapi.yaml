@@ -1,0 +1,11 @@
+openapi: 3.0.0
+info:
+  title: API Multinyectores
+  version: 1.0.0
+paths:
+  /:
+    get:
+      summary: Ping
+      responses:
+        '200':
+          description: OK

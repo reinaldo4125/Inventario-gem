@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS clientes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(255) NOT NULL,
+  tipo_cliente ENUM('Detal', 'Mayor', 'Almacén') NOT NULL,
+  documento VARCHAR(50) NOT NULL UNIQUE,
+  tipo_documento ENUM('CC', 'NIT', 'CE', 'Otro') NOT NULL,
+  telefono VARCHAR(50),
+  correo VARCHAR(100),
+  direccion VARCHAR(255),
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
