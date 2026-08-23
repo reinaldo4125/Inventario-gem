@@ -161,12 +161,23 @@ let dbInitialized = false;
 async function initDb() {
   if (dbInitialized) return;
   dbInitialized = true;
-  try {
-    await sequelize.authenticate();
-    console.log('[AI Studio] Conexión a BD lista (' + sequelize.getDialect() + ').');
-  } catch (err) {
-    console.warn('[AI Studio] Conexión BD advertencia:', err && err.message ? err.message : err);
+  
+  // Reintentos automáticos para esperar a que MySQL en Docker termine de inicializar
+  let connected = false;
+  for (let attempt = 1; attempt <= 15; attempt++) {
+    try {
+      await sequelize.authenticate();
+      console.log('[AI Studio] Conexión a BD lista (' + sequelize.getDialect() + ').');
+      connected = true;
+      break;
+    } catch (err) {
+      console.warn(`[AI Studio] Intento ${attempt}/15 conectando a BD: ${err && err.message ? err.message : err}`);
+      if (attempt < 15) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
   }
+
 
   try {
     // Migraciones/columnas adicionales seguras para usuarios

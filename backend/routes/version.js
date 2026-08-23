@@ -1,6 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const pkg = require('../../package.json');
+
+let pkg = { version: '1.0.0', description: 'Sistema de gestión de inventarios, ventas y facturación' };
+try {
+  pkg = require('../package.json');
+} catch (e) {
+  try {
+    pkg = require('../../package.json');
+  } catch (err) {}
+}
 
 // Endpoint público para consultar la versión del sistema
 router.get('/', (req, res) => {
@@ -15,3 +23,4 @@ router.get('/', (req, res) => {
 });
 
 module.exports = router;
+
