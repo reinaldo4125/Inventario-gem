@@ -133,6 +133,8 @@ app.use('/api/producto-costos', productoCostosRouter);
 app.use('/api/traslados', trasladosRouter);
 app.use('/api/kardex', kardexRouter);
 app.use('/api/caja', cajaRouter);
+const versionRouter = require('./routes/version');
+app.use('/api/version', versionRouter);
 app.use('/api/backup', backupRouter);
 
 // Swagger docs

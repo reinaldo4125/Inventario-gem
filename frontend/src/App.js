@@ -39,11 +39,12 @@ function App() {
   const [seccion, setSeccion] = useState('dashboard');
   const [usuario, setUsuario] = useState(null);
   const [empresa, setEmpresa] = useState(null);
+  const [appVersion, setAppVersion] = useState('1.0.0');
   // If AuthContext is provided, use it for login/logout
   let authContext = null;
   try { authContext = require('./AuthContext').AuthContext; } catch {}
 
-  // Cargar datos públicos de empresa para el logo y título de la cabecera
+  // Cargar datos públicos de empresa y versión del sistema
   useEffect(() => {
     const cargarEmpresa = () => {
       fetch('/empresa/public')
@@ -55,6 +56,16 @@ function App() {
         })
         .catch(() => {});
     };
+
+    fetch('/api/version')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && data.version) {
+          setAppVersion(data.version);
+        }
+      })
+      .catch(() => {});
+
     cargarEmpresa();
     window.addEventListener('empresaUpdated', cargarEmpresa);
     return () => window.removeEventListener('empresaUpdated', cargarEmpresa);
@@ -98,7 +109,20 @@ function App() {
             style={{ maxHeight: '50px', maxWidth: '160px', objectFit: 'contain' }}
           />
           <div>
-            <div className="titulo">{empresa?.nombre || 'MULTINYECTORES'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="titulo">{empresa?.nombre || 'MULTINYECTORES'}</div>
+              <span style={{ 
+                background: '#e0f2fe', 
+                color: '#0369a1', 
+                fontSize: '11px', 
+                fontWeight: 700, 
+                padding: '2px 8px', 
+                borderRadius: '12px',
+                border: '1px solid #bae6fd' 
+              }}>
+                v{appVersion}
+              </span>
+            </div>
             <div className="subtitulo">INYECCIÓN ELECTRÓNICA & INVENTARIO</div>
           </div>
         </div>
@@ -251,6 +275,8 @@ function App() {
 
       <footer style={{ marginTop: 32, padding: '18px 20px', textAlign: 'center', fontSize: '13px', color: '#64748b', borderTop: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
         <span>Multinyectores © 2026 — Sistema de Gestión Comercial & Inyección Electrónica</span>
+        <span style={{ color: '#cbd5e1' }}>|</span>
+        <span style={{ background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>v{appVersion}</span>
         <span style={{ color: '#cbd5e1' }}>|</span>
         <span>
           Desarrollado por{' '}
