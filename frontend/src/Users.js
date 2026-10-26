@@ -91,7 +91,7 @@ function Users({ usuario }) {
   useEffect(() => {
     const usuarioActual = usuario || JSON.parse(localStorage.getItem('usuario') || '{}');
     const tokenLocal = usuario?.token || localStorage.getItem('token') || '';
-    if (usuarioActual?.rol === 'admin') {
+    if (usuarioActual?.rol === 'admin' || usuarioActual?.rol === 'admin_pos') {
       fetchUsuarios();
       const fetchAlmacenes = async () => {
         try {
@@ -608,7 +608,12 @@ function Users({ usuario }) {
                 style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #cbd5e0', background: '#fff' }}
               >
                 <option value="">Selecciona un rol</option>
-                <option value="admin">Administrador (Control Total)</option>
+                {usuario?.rol === 'admin' && (
+                  <>
+                    <option value="admin">Administrador General (Control Total)</option>
+                    <option value="admin_pos">Administrador de Punto de Venta (Gestión de Sede)</option>
+                  </>
+                )}
                 <option value="vendedor">Vendedor (Punto de Venta / Cotizaciones)</option>
                 <option value="almacen">Encargado de Almacén (Inventario / Movimientos)</option>
               </select>
@@ -637,11 +642,12 @@ function Users({ usuario }) {
               <select 
                 id="almacenId" 
                 name="almacenId" 
-                value={form.almacenId} 
+                value={usuario?.rol === 'admin_pos' ? (usuario?.almacenId || '') : form.almacenId} 
                 onChange={handleChange} 
+                disabled={usuario?.rol === 'admin_pos'}
                 className="input" 
                 required={form.rol !== 'admin' && form.rol !== 'administrador'}
-                style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #cbd5e0', background: '#fff' }}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', border: '1px solid #cbd5e0', background: usuario?.rol === 'admin_pos' ? '#f8fafc' : '#fff' }}
               >
                 <option value="">
                   {(form.rol === 'admin' || form.rol === 'administrador') 
@@ -851,7 +857,8 @@ function Users({ usuario }) {
             style={{ width: 'auto', minWidth: '140px' }}
           >
             <option value="">Todos los Roles</option>
-            <option value="admin">Administrador</option>
+            <option value="admin">Admin General</option>
+            <option value="admin_pos">Admin Punto de Venta</option>
             <option value="vendedor">Vendedor</option>
             <option value="almacen">Almacén</option>
           </select>
@@ -933,10 +940,10 @@ function Users({ usuario }) {
                       fontSize: '11px', 
                       fontWeight: 'bold',
                       textTransform: 'uppercase',
-                      background: u.rol === 'admin' ? '#ebf8ff' : u.rol === 'vendedor' ? '#feebc8' : '#e6fffa',
-                      color: u.rol === 'admin' ? '#2b6cb0' : u.rol === 'vendedor' ? '#c05621' : '#234e52'
+                      background: u.rol === 'admin' ? '#ebf8ff' : u.rol === 'admin_pos' ? '#faf5ff' : u.rol === 'vendedor' ? '#feebc8' : '#e6fffa',
+                      color: u.rol === 'admin' ? '#2b6cb0' : u.rol === 'admin_pos' ? '#6b46c1' : u.rol === 'vendedor' ? '#c05621' : '#234e52'
                     }}>
-                      {u.rol}
+                      {u.rol === 'admin_pos' ? 'Admin Sede' : u.rol === 'admin' ? 'Admin Global' : u.rol}
                     </span>
                     {u.cargo && (
                       <div style={{ fontSize: '12px', color: '#4a5568', marginTop: '2px', fontWeight: 500 }}>
@@ -972,8 +979,8 @@ function Users({ usuario }) {
                   <td style={{ padding: '12px' }}>
                     <button
                       onClick={() => handleToggleEstado(u)}
-                      disabled={loading}
-                      title="Haz clic para cambiar estado"
+                      disabled={loading || (usuario?.rol === 'admin_pos' && u.rol === 'admin')}
+                      title={usuario?.rol === 'admin_pos' && u.rol === 'admin' ? "No tiene permisos para modificar administradores" : "Haz clic para cambiar estado"}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
@@ -983,9 +990,10 @@ function Users({ usuario }) {
                         fontSize: '12px',
                         fontWeight: 'bold',
                         border: 'none',
-                        cursor: 'pointer',
+                        cursor: (usuario?.rol === 'admin_pos' && u.rol === 'admin') ? 'not-allowed' : 'pointer',
                         background: u.activo !== false ? '#c6f6d5' : '#fed7d7',
-                        color: u.activo !== false ? '#22543d' : '#742a2a'
+                        color: u.activo !== false ? '#22543d' : '#742a2a',
+                        opacity: (usuario?.rol === 'admin_pos' && u.rol === 'admin') ? 0.6 : 1
                       }}
                     >
                       {u.activo !== false ? (
@@ -1007,24 +1015,30 @@ function Users({ usuario }) {
                   </td>
                   <td style={{ padding: '12px' }}>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
-                      <button 
-                        className="btn btn-edit" 
-                        onClick={() => handleEdit(u)} 
-                        disabled={loading} 
-                        style={{ height: 32, width: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '2px solid #3182ce', color: '#3182ce', borderRadius: '4px', cursor: 'pointer', padding: 0 }} 
-                        title="Editar usuario"
-                      >
-                        <MdEdit size={16} />
-                      </button>
-                      <button 
-                        className="btn btn-delete" 
-                        onClick={() => handleDelete(u.id)} 
-                        disabled={loading} 
-                        style={{ height: 32, width: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '2px solid #e53e3e', color: '#e53e3e', borderRadius: '4px', cursor: 'pointer', padding: 0 }} 
-                        title="Eliminar usuario"
-                      >
-                        <MdDelete size={16} />
-                      </button>
+                      {!(usuario?.rol === 'admin_pos' && u.rol === 'admin') ? (
+                        <>
+                          <button 
+                            className="btn btn-edit" 
+                            onClick={() => handleEdit(u)} 
+                            disabled={loading} 
+                            style={{ height: 32, width: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '2px solid #3182ce', color: '#3182ce', borderRadius: '4px', cursor: 'pointer', padding: 0 }} 
+                            title="Editar usuario"
+                          >
+                            <MdEdit size={16} />
+                          </button>
+                          <button 
+                            className="btn btn-delete" 
+                            onClick={() => handleDelete(u.id)} 
+                            disabled={loading} 
+                            style={{ height: 32, width: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '2px solid #e53e3e', color: '#e53e3e', borderRadius: '4px', cursor: 'pointer', padding: 0 }} 
+                            title="Eliminar usuario"
+                          >
+                            <MdDelete size={16} />
+                          </button>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: '11px', color: '#a0aec0', fontStyle: 'italic' }}>Protegido</span>
+                      )}
                       {showConfirm && deleteId === u.id && (
                         <div className="confirm-delete" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <div className="confirm-delete-content" style={{ background: '#fff', padding: '20px', borderRadius: '8px', maxWidth: '350px', textAlign: 'center' }}>

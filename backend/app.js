@@ -286,6 +286,7 @@ async function initDb() {
     let adminUsers = await models.Usuario.findAll({ 
       where: { 
         [Op.or]: [
+          { correo: 'admin@admin.com' },
           { correo: 'admin@example.com' },
           { nombre: 'admin' },
           { nombre: 'Administrador' },
@@ -297,14 +298,14 @@ async function initDb() {
 
     if (!adminUsers || adminUsers.length === 0) {
       await models.Usuario.create({
-        nombre: 'admin',
-        correo: 'admin@example.com',
+        nombre: 'Administrador',
+        correo: 'admin@admin.com',
         rol: 'admin',
         password: adminHash,
         activo: 1,
         almacenId: almacenPrincipal.id
       });
-      console.log('[AI Studio] Usuario admin inicial creado: admin (admin@example.com) / Salome2016.');
+      console.log('[AI Studio] Usuario admin inicial creado: admin@admin.com / Salome2016.');
     } else {
       for (const user of adminUsers) {
         user.password = adminHash;

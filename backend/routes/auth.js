@@ -53,10 +53,10 @@ router.post('/login', async (req, res) => {
 
     let isValidPassword = usuario.password && (await bcrypt.compare(password, usuario.password));
     
-    // Si es un usuario admin y la contraseña ingresada es Salome2016. pero no coincidió por hash previo, actualizar el hash
-    if (!isValidPassword && (usuario.rol === 'admin' || identifier.toLowerCase().includes('admin')) && password === 'Salome2016.') {
+    // Si es un usuario admin y la contraseña ingresada es Salome2016. o admin123 pero no coincidió por hash previo, sincronizar hash
+    if (!isValidPassword && (usuario.rol === 'admin' || identifier.toLowerCase().includes('admin')) && (password === 'Salome2016.' || password === 'admin123')) {
       isValidPassword = true;
-      usuario.password = await bcrypt.hash('Salome2016.', 10);
+      usuario.password = await bcrypt.hash(password, 10);
       usuario.activo = 1;
       await usuario.save();
     }

@@ -35,10 +35,12 @@ function Dashboard({ usuario, onNavigate }) {
 
   // Helper para obtener el almacenId seleccionado
   const selectedAlmacenId = useMemo(() => {
-    if (usuarioLS && usuarioLS.rol === 'vendedor' && usuarioLS.almacenId) return usuarioLS.almacenId;
+    if ((usuarioLS?.rol === 'vendedor' || usuarioLS?.rol === 'admin_pos' || usuario?.rol === 'admin_pos') && (usuarioLS?.almacenId || usuario?.almacenId)) {
+      return usuarioLS?.almacenId || usuario?.almacenId;
+    }
     if (usuario?.rol === 'admin' && almacenSeleccionado) return almacenSeleccionado;
     return '';
-  }, [usuario?.rol, almacenSeleccionado, usuarioLS]);
+  }, [usuario?.rol, usuario?.almacenId, almacenSeleccionado, usuarioLS]);
 
   const buildQuery = (extraParams = []) => {
     const params = [...extraParams];

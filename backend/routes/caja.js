@@ -5,7 +5,7 @@ const { authRole } = require('../middleware/auth');
 const { Op } = require('sequelize');
 
 // Obtener estado de caja actual
-router.get('/estado', authRole(['admin', 'vendedor']), async (req, res) => {
+router.get('/estado', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
   try {
     const usuarioNombre = req.user ? (req.user.nombre || req.user.correo) : 'Usuario';
     const almacenId = req.user?.almacenId || 1;
@@ -87,7 +87,7 @@ router.get('/estado', authRole(['admin', 'vendedor']), async (req, res) => {
 });
 
 // Abrir turno de caja
-router.post('/apertura', authRole(['admin', 'vendedor']), async (req, res) => {
+router.post('/apertura', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
   try {
     const { monto_apertura, observaciones } = req.body;
     const usuarioNombre = req.user ? (req.user.nombre || req.user.correo) : 'Usuario';
@@ -119,7 +119,7 @@ router.post('/apertura', authRole(['admin', 'vendedor']), async (req, res) => {
 });
 
 // Cerrar turno de caja (Arqueo)
-router.post('/cierre', authRole(['admin', 'vendedor']), async (req, res) => {
+router.post('/cierre', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
   try {
     const { monto_cierre, observaciones } = req.body;
     const usuarioNombre = req.user ? (req.user.nombre || req.user.correo) : 'Usuario';
@@ -200,7 +200,7 @@ router.post('/cierre', authRole(['admin', 'vendedor']), async (req, res) => {
 });
 
 // Historial de cierres de caja
-router.get('/historial', authRole(['admin', 'vendedor']), async (req, res) => {
+router.get('/historial', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
   try {
     const historial = await Caja.findAll({
       order: [['fecha_apertura', 'DESC']],

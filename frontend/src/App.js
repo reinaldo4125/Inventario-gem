@@ -128,7 +128,7 @@ function App() {
         </div>
         <div className="header-user-info">
           <span className="user-badge">
-            👤 <strong>{usuario.nombre}</strong> ({usuario.rol})
+            👤 <strong>{usuario.nombre}</strong> ({usuario.rol === 'admin_pos' ? 'Admin Punto de Venta' : usuario.rol === 'admin' ? 'Administrador Global' : usuario.rol})
           </span>
           <button 
             className="btn-principal btn-peligro" 
@@ -216,6 +216,53 @@ function App() {
             </>
           )}
 
+          {usuario.rol === 'admin_pos' && (
+            <>
+              <button 
+                onClick={() => setSeccion('ventas')} 
+                className={`nav-btn ${seccion === 'ventas' ? 'active' : ''}`}
+              >
+                🛒 Ventas
+              </button>
+              <button 
+                onClick={() => setSeccion('facturacion')} 
+                className={`nav-btn ${seccion === 'facturacion' ? 'active' : ''}`}
+              >
+                📄 Facturación
+              </button>
+              <button 
+                onClick={() => setSeccion('caja')} 
+                className={`nav-btn ${seccion === 'caja' ? 'active' : ''}`}
+              >
+                💵 Arqueo de Caja
+              </button>
+              <button 
+                onClick={() => setSeccion('productos')} 
+                className={`nav-btn ${seccion === 'productos' ? 'active' : ''}`}
+              >
+                📦 Productos
+              </button>
+              <button 
+                onClick={() => setSeccion('clientes')} 
+                className={`nav-btn ${seccion === 'clientes' ? 'active' : ''}`}
+              >
+                👤 Clientes
+              </button>
+              <button 
+                onClick={() => setSeccion('usuarios')} 
+                className={`nav-btn ${seccion === 'usuarios' ? 'active' : ''}`}
+              >
+                👥 Personal Sede
+              </button>
+              <button 
+                onClick={() => setSeccion('reportes')} 
+                className={`nav-btn ${seccion === 'reportes' ? 'active' : ''}`}
+              >
+                📈 Reportes Sede
+              </button>
+            </>
+          )}
+
           {usuario.rol === 'vendedor' && (
             <>
               <button 
@@ -262,13 +309,13 @@ function App() {
       <main style={{ minHeight: '80vh', padding: '0 8px 32px' }}>
         {seccion === 'almacenes' && usuario.rol === 'admin' && <Almacenes usuario={usuario} />}
         {seccion === 'dashboard' && <Dashboard usuario={usuario} onNavigate={setSeccion} />}
-        {seccion === 'usuarios' && usuario.rol === 'admin' && <Users usuario={usuario} />}
-        {seccion === 'clientes' && (usuario.rol === 'admin' || usuario.rol === 'vendedor') && <Clientes usuario={usuario} />}
-        {seccion === 'productos' && (usuario.rol === 'admin' || usuario.rol === 'vendedor') && <Productos usuario={usuario} />}
-        {seccion === 'ventas' && (usuario.rol === 'admin' || usuario.rol === 'vendedor') && <Ventas usuario={usuario} />}
-        {seccion === 'caja' && (usuario.rol === 'admin' || usuario.rol === 'vendedor') && <Caja usuario={usuario} />}
-        {seccion === 'facturacion' && usuario.rol === 'admin' && <Facturacion usuario={usuario} />}
-        {seccion === 'reportes' && (usuario.rol === 'admin' || usuario.rol === 'vendedor') && <Reportes usuario={usuario} />}
+        {seccion === 'usuarios' && (usuario.rol === 'admin' || usuario.rol === 'admin_pos') && <Users usuario={usuario} />}
+        {seccion === 'clientes' && (usuario.rol === 'admin' || usuario.rol === 'vendedor' || usuario.rol === 'admin_pos') && <Clientes usuario={usuario} />}
+        {seccion === 'productos' && (usuario.rol === 'admin' || usuario.rol === 'vendedor' || usuario.rol === 'admin_pos') && <Productos usuario={usuario} />}
+        {seccion === 'ventas' && (usuario.rol === 'admin' || usuario.rol === 'vendedor' || usuario.rol === 'admin_pos') && <Ventas usuario={usuario} />}
+        {seccion === 'caja' && (usuario.rol === 'admin' || usuario.rol === 'vendedor' || usuario.rol === 'admin_pos') && <Caja usuario={usuario} />}
+        {seccion === 'facturacion' && (usuario.rol === 'admin' || usuario.rol === 'admin_pos') && <Facturacion usuario={usuario} />}
+        {seccion === 'reportes' && (usuario.rol === 'admin' || usuario.rol === 'vendedor' || usuario.rol === 'admin_pos') && <Reportes usuario={usuario} />}
         {seccion === 'empresa' && usuario.rol === 'admin' && <EmpresaForm />}
         {seccion === 'perfil' && usuario.rol === 'vendedor' && <PerfilVendedor usuario={usuario} />}
       </main>

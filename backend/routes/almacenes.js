@@ -4,7 +4,7 @@ const { Almacen, Producto, ProductoAlmacen, Usuario } = require('../models');
 const { authRole } = require('./auth');
 
 // Obtener todos los almacenes con estadísticas agregadas de inventario y personal
-router.get('/', authRole(['admin', 'vendedor']), async (req, res) => {
+router.get('/', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
   try {
     const almacenes = await Almacen.findAll({ order: [['id', 'ASC']] });
 
@@ -63,7 +63,7 @@ router.get('/', authRole(['admin', 'vendedor']), async (req, res) => {
 });
 
 // Obtener el inventario detallado de un almacén específico
-router.get('/:id/inventario', authRole(['admin', 'vendedor']), async (req, res) => {
+router.get('/:id/inventario', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
   try {
     const { id } = req.params;
     const almacen = await Almacen.findByPk(id);

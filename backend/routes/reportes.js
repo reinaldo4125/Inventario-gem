@@ -132,10 +132,10 @@ router.get('/ganancia-producto', authRole(['admin']), async (req, res) => {
 router.get('/ventas-pendientes-vs-facturadas', authToken, async (req, res) => {
   try {
     const { desde, hasta, vendedor, cliente } = req.query;
-    // respetar rol: vendedores solo verán su almacén
+    // respetar rol: vendedores y admin_pos solo verán su almacén
     const user = req.user || {};
     let almacenId = req.query.almacenId;
-    if (user.rol === 'vendedor') {
+    if (user.rol === 'vendedor' || user.rol === 'admin_pos') {
       almacenId = user.almacenId;
     }
     const where = {};
@@ -145,8 +145,8 @@ router.get('/ventas-pendientes-vs-facturadas', authToken, async (req, res) => {
       if (hasta) where.fecha[Op.lte] = new Date(hasta);
     }
     if (almacenId) where.almacenId = almacenId;
-    // aplicar filtro por vendedor/cliente cuando sean provistos (admin)
-    if (user.rol !== 'vendedor') {
+    // aplicar filtro por vendedor/cliente cuando sean provistos
+    if (user.rol === 'admin' || user.rol === 'admin_pos') {
       if (vendedor) where.vendedor = vendedor;
       if (cliente) where.clienteId = cliente;
     }
@@ -221,15 +221,20 @@ router.get('/ventas-agrupadas', authToken, async (req, res) => {
       if (desde) whereVenta.fecha[Op.gte] = new Date(desde);
       if (hasta) whereVenta.fecha[Op.lte] = new Date(hasta);
     }
-    // Si es vendedor, forzar filtro: preferir almacenId, si no usar vendedor
+    // Si es vendedor o admin_pos, forzar filtro a su almacén
     if (user.rol === 'vendedor') {
       if (user.almacenId) {
         whereVenta.almacenId = user.almacenId;
       } else if (user.nombre) {
         whereVenta.vendedor = user.nombre;
       }
+    } else if (user.rol === 'admin_pos') {
+      if (user.almacenId) {
+        whereVenta.almacenId = user.almacenId;
+      }
+      if (vendedorQuery) whereVenta.vendedor = vendedorQuery;
     } else {
-      // Admin u otros roles pueden pasar filtros
+      // Admin global u otros roles pueden pasar filtros
       if (vendedorQuery) whereVenta.vendedor = vendedorQuery;
       if (req.query.almacenId) whereVenta.almacenId = req.query.almacenId;
     }
