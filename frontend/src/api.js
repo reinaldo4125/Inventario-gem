@@ -52,7 +52,16 @@ async function request(path, options = {}) {
     // si no hay refresh o falla, eliminar tokens y forzar login
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
-    window.location = '/';
+    localStorage.removeItem('usuario');
+    localStorage.setItem('auth_notice', 'Tu sesión ha expirado o el token es inválido. Por favor inicia sesión nuevamente.');
+    try {
+      window.dispatchEvent(new CustomEvent('auth:expired', {
+        detail: { reason: 'Tu sesión ha expirado o el token es inválido. Por favor inicia sesión nuevamente.' }
+      }));
+    } catch {}
+    if (window.location.pathname !== '/') {
+      window.location = '/';
+    }
     return { res };
   }
   return { res };

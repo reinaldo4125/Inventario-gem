@@ -17,6 +17,15 @@ function parseJwt (token) {
     return null;
   }
 }
+
+function isTokenExpired(token) {
+  if (!token) return true;
+  const decoded = parseJwt(token);
+  if (!decoded) return true;
+  if (!decoded.exp) return false;
+  // Considerar expirado si restan menos de 3 segundos
+  return (decoded.exp * 1000) <= (Date.now() + 3000);
+}
 import './multinyectores.css';
 import Users from './Users';
 import Productos from './Productos';
@@ -43,6 +52,35 @@ function App() {
   // If AuthContext is provided, use it for login/logout
   let authContext = null;
   try { authContext = require('./AuthContext').AuthContext; } catch {}
+
+  // Función unificada para cerrar sesión y limpiar datos de forma segura
+  const cerrarSesion = (motivo = null) => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('usuario');
+    if (motivo) {
+      localStorage.setItem('auth_notice', motivo);
+    }
+    setUsuario(null);
+    try {
+      if (authContext && authContext._currentValue && authContext._currentValue.logout) {
+        authContext._currentValue.logout();
+      }
+    } catch {}
+  };
+
+  // Escuchar eventos globales de expiración o token inválido
+  useEffect(() => {
+    const handleAuthExpired = (event) => {
+      const msg = event?.detail?.reason || 'Tu sesión ha expirado o el token es inválido. Por favor inicia sesión nuevamente.';
+      cerrarSesion(msg);
+    };
+    window.addEventListener('auth:expired', handleAuthExpired);
+
+    return () => {
+      window.removeEventListener('auth:expired', handleAuthExpired);
+    };
+  }, []);
 
   // Cargar datos públicos de empresa y versión del sistema
   useEffect(() => {
@@ -71,27 +109,61 @@ function App() {
     return () => window.removeEventListener('empresaUpdated', cargarEmpresa);
   }, []);
 
-  // Al cargar, si hay token, decodifica usuario
-  // El tiempo de expiración de la sesión depende del token JWT generado en el backend (por ejemplo, 1h o 2h típicamente).
-  // Si el token expira, el backend responde 401 y el frontend redirige automáticamente al login.
+  // Validar token y programar cierre automático cuando llegue a exp
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      if (usuario) setUsuario(null);
+      return;
+    }
+
+    if (isTokenExpired(token)) {
+      cerrarSesion('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+      return;
+    }
+
+    const decoded = parseJwt(token);
+    if (!decoded || !decoded.nombre || !decoded.rol) {
+      cerrarSesion('Token inválido. Inicia sesión nuevamente.');
+      return;
+    }
+
     if (!usuario) {
-      const token = localStorage.getItem('token');
-      if (token) {
-        const decoded = parseJwt(token);
-        if (decoded && decoded.nombre && decoded.rol) {
-          setUsuario({
-            id: decoded.id,
-            nombre: decoded.nombre,
-            rol: decoded.rol,
-            correo: decoded.correo,
-            almacenId: decoded.almacenId,
-            almacen: decoded.almacen,
-            token
-          });
-        }
+      setUsuario({
+        id: decoded.id,
+        nombre: decoded.nombre,
+        rol: decoded.rol,
+        correo: decoded.correo,
+        almacenId: decoded.almacenId,
+        almacen: decoded.almacen,
+        token
+      });
+    }
+
+    // Programar temporizador exacto cuando el token expire en vivo
+    if (decoded.exp) {
+      const msRestantes = (decoded.exp * 1000) - Date.now();
+      if (msRestantes > 0) {
+        const timerId = setTimeout(() => {
+          cerrarSesion('Tu sesión ha expirado automáticamente. Por favor inicia sesión nuevamente.');
+        }, msRestantes);
+        return () => clearTimeout(timerId);
+      } else {
+        cerrarSesion('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
       }
     }
+  }, [usuario]);
+
+  // Verificación periódica cada 15 segundos en caso de cambio de hora o suspensión
+  useEffect(() => {
+    if (!usuario) return;
+    const interval = setInterval(() => {
+      const token = localStorage.getItem('token');
+      if (!token || isTokenExpired(token)) {
+        cerrarSesion('Tu sesión ha expirado. Por favor inicia sesión nuevamente.');
+      }
+    }, 15000);
+    return () => clearInterval(interval);
   }, [usuario]);
 
   if (!usuario) {
@@ -132,15 +204,7 @@ function App() {
           </span>
           <button 
             className="btn-principal btn-peligro" 
-            onClick={() => {
-              setUsuario(null);
-              localStorage.removeItem('token');
-              localStorage.removeItem('refreshToken');
-              try {
-                const { logout } = require('./AuthContext').AuthContext._currentValue || {};
-                if (logout) logout();
-              } catch {}
-            }}
+            onClick={() => cerrarSesion()}
             style={{ padding: '6px 14px', fontSize: '13px' }}
           >
             Cerrar sesión

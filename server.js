@@ -29,9 +29,7 @@ if (fs.existsSync(imgDir)) {
 }
 
 // Serve frontend static build files
-if (fs.existsSync(frontendBuildPath)) {
-  app.use(express.static(frontendBuildPath));
-}
+app.use(express.static(frontendBuildPath));
 
 // Fallback to index.html for SPA client-side routes
 app.use((req, res, next) => {
@@ -51,6 +49,11 @@ app.use((req, res, next) => {
     req.path.startsWith('/healthz')
   ) {
     return next();
+  }
+
+  // Never return HTML fallback for static assets (js, css, images, map files)
+  if (req.path.startsWith('/static/') || /\.(js|css|json|ico|png|jpg|jpeg|svg|map)$/.test(req.path)) {
+    return res.status(404).send('Asset not found');
   }
 
   const indexPath = path.join(frontendBuildPath, 'index.html');

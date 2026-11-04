@@ -12,9 +12,16 @@ function Login({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [empresaLogo, setEmpresaLogo] = useState(null);
   const [empresaNombre, setEmpresaNombre] = useState('MULTINYECTORES');
+  const [notice, setNotice] = useState('');
   const auth = useContext(AuthContext);
 
   useEffect(() => {
+    const savedNotice = localStorage.getItem('auth_notice');
+    if (savedNotice) {
+      setNotice(savedNotice);
+      localStorage.removeItem('auth_notice');
+    }
+
     fetch('/empresa/public')
       .then(res => res.ok ? res.json() : null)
       .then(data => {
@@ -29,6 +36,7 @@ function Login({ onLogin }) {
   const handleSubmit = async e => {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
     try {
       const res = await fetch('/auth/login', {
@@ -85,6 +93,12 @@ function Login({ onLogin }) {
             <h2 style={{margin:0,fontSize:'22px',fontWeight:'700',color:'#0f172a',textAlign:'center'}}>{empresaNombre || 'MULTINYECTORES'}</h2>
             <span style={{fontSize:'12px',fontWeight:'600',color:'#64748b',letterSpacing:'0.05em',marginTop:'2px'}}>INYECCIÓN ELECTRÓNICA & INVENTARIO</span>
           </div>
+
+          {notice && (
+            <div style={{padding:'10px 14px',backgroundColor:'#fef3c7',color:'#92400e',border:'1px solid #fde68a',borderRadius:'6px',fontSize:'13px',marginBottom:'16px',lineHeight:'1.4',display:'flex',alignItems:'center',gap:'8px'}}>
+              <span>⚠️</span> <span>{notice}</span>
+            </div>
+          )}
 
           {error && (
             <div style={{padding:'10px 14px',backgroundColor:'#fef2f2',color:'#991b1b',border:'1px solid #fecaca',borderRadius:'6px',fontSize:'13px',marginBottom:'16px',lineHeight:'1.4'}}>
