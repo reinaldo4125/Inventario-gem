@@ -4,11 +4,11 @@ const router = express.Router();
 const Usuario = require('../models/Usuario');
 const bcrypt = require('bcryptjs');
 const auth = require('../middleware/auth');
-const requireRole = require('../middleware/roles');
+const requirePermiso = require('../middleware/roles');
 const { Op } = require('sequelize');
 
 // Editar un usuario por ID
-router.put('/:id', auth, requireRole('admin', 'admin_pos'), [
+router.put('/:id', auth, requirePermiso('usuarios.gestionar_vendedores'), [
   body('nombre').notEmpty().withMessage('El nombre es obligatorio'),
   body('correo').isEmail().withMessage('Correo inválido'),
   body('rol').notEmpty().withMessage('El rol es obligatorio'),
@@ -20,7 +20,7 @@ router.put('/:id', auth, requireRole('admin', 'admin_pos'), [
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-    const id = req.params.id;
+    const id = Number(req.params.id);
     let { nombre, correo, rol, almacenId, password, activo, telefono, documento, cargo, direccion, comision, notas } = req.body;
 
     const targetUser = await Usuario.findByPk(id);
@@ -30,25 +30,30 @@ router.put('/:id', auth, requireRole('admin', 'admin_pos'), [
 
     // Reglas de seguridad para admin_pos
     if (req.user.rol === 'admin_pos') {
-      // No puede editar a un admin
-      if (targetUser.rol === 'admin') {
-        return res.status(403).json({ error: 'No tiene permisos para modificar un usuario Administrador Global' });
+      // Si se edita a sí mismo, no puede cambiarse el rol ni el almacén
+      if (Number(id) === req.user.id) {
+        if (rol && rol !== targetUser.rol) {
+          return res.status(403).json({ error: 'No puede modificar su propio rol' });
+        }
+        almacenId = req.user.almacenId;
+      } else {
+        // Solo puede editar usuarios con rol 'vendedor' de su misma sede
+        if (targetUser.rol !== 'vendedor') {
+          return res.status(403).json({ error: 'Solo puede modificar usuarios con rol vendedor' });
+        }
+        if (targetUser.almacenId !== req.user.almacenId) {
+          return res.status(403).json({ error: 'No puede modificar usuarios pertenecientes a otra sede' });
+        }
+        if (rol && rol !== 'vendedor') {
+          return res.status(403).json({ error: 'Solo puede asignar el rol vendedor' });
+        }
+        almacenId = req.user.almacenId;
       }
-      // No puede promover a admin
-      if (rol === 'admin') {
-        return res.status(403).json({ error: 'No tiene permisos para asignar el rol de Administrador Global' });
-      }
-      // Solo puede editar usuarios de su mismo almacén
-      if (targetUser.almacenId !== req.user.almacenId && targetUser.id !== req.user.id) {
-        return res.status(403).json({ error: 'No puede modificar usuarios pertenecientes a otra sede' });
-      }
-      // Forzar que el usuario continúe en el mismo almacén
-      almacenId = req.user.almacenId;
     }
 
     // Verificar si el correo ya está en uso por otro usuario
     const correoExiste = await Usuario.findOne({ where: { correo } });
-    if (correoExiste && correoExiste.id !== Number(id)) {
+    if (correoExiste && correoExiste.id !== id) {
       return res.status(400).json({ error: 'El correo electrónico ya está registrado por otro usuario.' });
     }
 
@@ -75,8 +80,8 @@ router.put('/:id', auth, requireRole('admin', 'admin_pos'), [
   }
 });
 
-// Obtener usuarios (admin ve todos; admin_pos ve los de su almacén excluyendo superadmins)
-router.get('/', auth, requireRole('admin', 'admin_pos'), async (req, res) => {
+// Obtener usuarios (admin ve todos; admin_pos ve los de su almacén)
+router.get('/', auth, requirePermiso('usuarios.gestionar_vendedores'), async (req, res) => {
   try {
     const whereCondition = {};
     if (req.user.rol === 'admin_pos') {
@@ -103,8 +108,8 @@ router.get('/', auth, requireRole('admin', 'admin_pos'), async (req, res) => {
   }
 });
 
-// Crear un nuevo usuario (admin o admin_pos para su sede)
-router.post('/', auth, requireRole('admin', 'admin_pos'), [
+// Crear un nuevo usuario (admin o admin_pos para vendedores de su sede)
+router.post('/', auth, requirePermiso('usuarios.gestionar_vendedores'), [
   body('nombre').notEmpty().withMessage('El nombre es obligatorio'),
   body('correo').isEmail().withMessage('Correo inválido'),
   body('rol').notEmpty().withMessage('El rol es obligatorio'),
@@ -120,8 +125,8 @@ router.post('/', auth, requireRole('admin', 'admin_pos'), [
     
     // Reglas para admin_pos
     if (req.user.rol === 'admin_pos') {
-      if (rol === 'admin') {
-        return res.status(403).json({ error: 'No tiene permisos para crear usuarios Administrador Global' });
+      if (rol !== 'vendedor') {
+        return res.status(403).json({ error: 'Solo puede crear usuarios con rol vendedor' });
       }
       // Forzar que el nuevo usuario quede en el almacén del admin_pos
       almacenId = req.user.almacenId;
@@ -168,7 +173,7 @@ router.post('/', auth, requireRole('admin', 'admin_pos'), [
 });
 
 // Cambiar estado activo/inactivo
-router.patch('/:id/toggle-estado', auth, requireRole('admin', 'admin_pos'), async (req, res) => {
+router.patch('/:id/toggle-estado', auth, requirePermiso('usuarios.gestionar_vendedores'), async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (req.user && req.user.id === id) {
@@ -178,8 +183,8 @@ router.patch('/:id/toggle-estado', auth, requireRole('admin', 'admin_pos'), asyn
     if (!usuario) return res.status(404).json({ error: 'Usuario no encontrado' });
 
     if (req.user.rol === 'admin_pos') {
-      if (usuario.rol === 'admin') {
-        return res.status(403).json({ error: 'No puede alterar cuentas de Administrador Global' });
+      if (usuario.rol !== 'vendedor') {
+        return res.status(403).json({ error: 'Solo puede modificar usuarios con rol vendedor' });
       }
       if (usuario.almacenId !== req.user.almacenId) {
         return res.status(403).json({ error: 'No puede alterar usuarios de otra sede' });
@@ -195,7 +200,7 @@ router.patch('/:id/toggle-estado', auth, requireRole('admin', 'admin_pos'), asyn
 });
 
 // Eliminar un usuario por ID (admin o admin_pos dentro de su sede)
-router.delete('/:id', auth, requireRole('admin', 'admin_pos'), async (req, res) => {
+router.delete('/:id', auth, requirePermiso('usuarios.gestionar_vendedores'), async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (req.user && req.user.id === id) {
@@ -206,8 +211,8 @@ router.delete('/:id', auth, requireRole('admin', 'admin_pos'), async (req, res) 
     if (!usuario) return res.status(404).json({ error: 'Usuario no encontrado' });
 
     if (req.user.rol === 'admin_pos') {
-      if (usuario.rol === 'admin') {
-        return res.status(403).json({ error: 'No puede eliminar un Administrador Global' });
+      if (usuario.rol !== 'vendedor') {
+        return res.status(403).json({ error: 'Solo puede eliminar usuarios con rol vendedor' });
       }
       if (usuario.almacenId !== req.user.almacenId) {
         return res.status(403).json({ error: 'No puede eliminar usuarios de otra sede' });

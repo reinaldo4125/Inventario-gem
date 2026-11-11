@@ -1,13 +1,29 @@
 const express = require('express');
 const router = express.Router();
 const { Traslado, DetalleTraslado, Producto, ProductoAlmacen, Almacen, Kardex } = require('../models');
-const { authRole } = require('../middleware/auth');
+const auth = require('../middleware/auth');
+const requirePermiso = require('../middleware/roles');
+const { almacenDelUsuario } = require('../utils/almacenScope');
+const { Op } = require('sequelize');
 const sequelize = require('../database/sequelize');
 
 // Listar todos los traslados
-router.get('/', authRole(['admin', 'vendedor']), async (req, res) => {
+router.get('/', auth, requirePermiso(['traslados.crear', 'traslados.recibir']), async (req, res) => {
   try {
+    const user = req.user || {};
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && user.rol !== 'admin') return;
+
+    const where = {};
+    if (scopedAlmacenId) {
+      where[Op.or] = [
+        { almacenOrigenId: scopedAlmacenId },
+        { almacenDestinoId: scopedAlmacenId }
+      ];
+    }
+
     const traslados = await Traslado.findAll({
+      where,
       include: [
         { model: Almacen, as: 'almacenOrigen', attributes: ['id', 'nombre'] },
         { model: Almacen, as: 'almacenDestino', attributes: ['id', 'nombre'] },
@@ -27,11 +43,16 @@ router.get('/', authRole(['admin', 'vendedor']), async (req, res) => {
 });
 
 // Crear un traslado entre bodegas
-router.post('/', authRole(['admin', 'vendedor']), async (req, res) => {
+router.post('/', auth, requirePermiso('traslados.crear'), async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { almacenOrigenId, almacenDestinoId, observaciones, items } = req.body;
     const usuarioNombre = req.user ? (req.user.nombre || req.user.correo) : 'Usuario';
+
+    if (req.user.rol !== 'admin' && Number(almacenOrigenId) !== Number(req.user.almacenId)) {
+      await t.rollback();
+      return res.status(403).json({ error: 'Solo puede originar traslados desde su sede asignada' });
+    }
 
     if (!almacenOrigenId || !almacenDestinoId) {
       await t.rollback();

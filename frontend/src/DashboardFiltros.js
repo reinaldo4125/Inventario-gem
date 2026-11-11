@@ -1,9 +1,10 @@
 import React from 'react';
+import { hoyColombia } from './utils/formatters';
 
 const DashboardFiltros = ({ filtros, setFiltros, vendedores, clientesList }) => {
   const setPresetDate = (type) => {
     const today = new Date();
-    const formatDate = (d) => d.toISOString().split('T')[0];
+    const formatDate = (d) => hoyColombia(d);
 
     if (type === 'hoy') {
       const dateStr = formatDate(today);

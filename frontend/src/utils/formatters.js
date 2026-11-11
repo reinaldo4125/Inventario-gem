@@ -1,8 +1,12 @@
 // Utilities for parsing and formatting prices consistently
 export function parsePrecio(val) {
-  if (val === undefined || val === null || val === '') return 0.01;
-  if (typeof val === 'number') return Math.round(val * 100) / 100;
+  if (val === undefined || val === null || val === '') return null;
+  if (typeof val === 'number') {
+    if (isNaN(val) || val <= 0) return null;
+    return Math.round(val * 100) / 100;
+  }
   let s = String(val).trim();
+  if (s === '') return null;
   // Normalize common formats robustly.
   // If both comma and dot present, assume dots are thousand separators and comma is decimal: '150.000,50' -> '150000.50'
   if (s.includes(',') && s.includes('.')) {
@@ -23,7 +27,7 @@ export function parsePrecio(val) {
   // remove any non-digit except dot and minus
   s = s.replace(/[^0-9.-]/g, '');
   let num = parseFloat(s);
-  if (isNaN(num) || num <= 0) return 0.01;
+  if (isNaN(num) || num <= 0) return null;
   return Math.round(num * 100) / 100;
 }
 
@@ -54,3 +58,26 @@ export function formatNumber(val, locale = 'es-CO') {
     return String(val);
   }
 }
+
+// Devuelve 'YYYY-MM-DD' en la zona horaria de Colombia (America/Bogota, UTC-5)
+export function hoyColombia(date = new Date()) {
+  try {
+    if (!date) date = new Date();
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return '';
+    const formatter = new Intl.DateTimeFormat('es-CO', {
+      timeZone: 'America/Bogota',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = formatter.formatToParts(d);
+    const y = parts.find(p => p.type === 'year')?.value;
+    const m = parts.find(p => p.type === 'month')?.value;
+    const day = parts.find(p => p.type === 'day')?.value;
+    return `${y}-${m}-${day}`;
+  } catch (e) {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+

@@ -5,45 +5,47 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secreto123';
-const REFRESH_SECRET = process.env.REFRESH_SECRET || 'refreshsecreto123';
+if (!process.env.JWT_SECRET) {
+  console.error("Falta JWT_SECRET en .env");
+  process.exit(1);
+}
+if (!process.env.REFRESH_SECRET) {
+  console.error("Falta REFRESH_SECRET en .env");
+  process.exit(1);
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const REFRESH_SECRET = process.env.REFRESH_SECRET;
 
 // Login
 router.post('/login', async (req, res) => {
-  const { correo, password } = req.body;
-  const identifier = (correo || '').trim();
+  const { correo, password, usuario: reqUsuario, username, contrasena, clave } = req.body || {};
+  const identifier = (correo || reqUsuario || username || '').trim();
+  const rawPassword = password || contrasena || clave || '';
   try {
-    // Incluir el almacén asociado (permite buscar por correo, nombre o 'admin')
     let usuario;
     try {
-      const isAdminQuery = identifier.toLowerCase().includes('admin');
+      const searchConditions = [
+        { correo: identifier },
+        { nombre: identifier }
+      ];
+      if (identifier.toLowerCase() === 'admin') {
+        searchConditions.push({ correo: 'admin@admin.com' });
+        searchConditions.push({ rol: 'admin' });
+      }
+
       usuario = await Usuario.findOne({ 
-        where: isAdminQuery ? {
-          [Op.or]: [
-            { correo: identifier },
-            { nombre: identifier },
-            { correo: 'admin@example.com' },
-            { nombre: 'admin' },
-            { nombre: 'Administrador' },
-            { rol: 'admin' }
-          ]
-        } : {
-          [Op.or]: [
-            { correo: identifier },
-            { nombre: identifier }
-          ]
+        where: {
+          [Op.or]: searchConditions
         }, 
         include: [{ association: 'almacen' }] 
       });
     } catch (dbErr) {
-      // Loguear detalles específicos de error de la base de datos para depuración
       console.error('DB error en Usuario.findOne:', {
         name: dbErr && dbErr.name,
         message: dbErr && dbErr.message,
-        sql: dbErr && (dbErr.sql || dbErr.sqlMessage),
-        original: dbErr && dbErr.original
+        sql: dbErr && (dbErr.sql || dbErr.sqlMessage)
       });
-      // Volver a lanzar para que el catch exterior lo maneje y devuelva 500
       throw dbErr;
     }
     if (!usuario) return res.status(401).json({ error: 'Credenciales incorrectas' });
@@ -51,15 +53,7 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Su cuenta de usuario se encuentra desactivada. Contacte al administrador.' });
     }
 
-    let isValidPassword = usuario.password && (await bcrypt.compare(password, usuario.password));
-    
-    // Si es un usuario admin y la contraseña ingresada es Salome2016. o admin123 pero no coincidió por hash previo, sincronizar hash
-    if (!isValidPassword && (usuario.rol === 'admin' || identifier.toLowerCase().includes('admin')) && (password === 'Salome2016.' || password === 'admin123')) {
-      isValidPassword = true;
-      usuario.password = await bcrypt.hash(password, 10);
-      usuario.activo = 1;
-      await usuario.save();
-    }
+    const isValidPassword = Boolean(usuario.password && (await bcrypt.compare(rawPassword, usuario.password)));
 
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Credenciales incorrectas' });

@@ -1,103 +1,61 @@
 const express = require('express');
 const router = express.Router();
-const { Producto } = require('../models');
-const { Op } = require('sequelize');
-const { authToken } = require('./auth');
+const auth = require('../middleware/auth');
+const requirePermiso = require('../middleware/roles');
+const { almacenDelUsuario } = require('../utils/almacenScope');
 
 // Productos con stock bajo (alerta)
-router.get('/alertas-inventario', authToken, async (req, res) => {
+router.get('/alertas-inventario', auth, requirePermiso(['reportes.ver', 'reportes.ver_propios', 'dashboard.stock']), async (req, res) => {
   try {
-    // Evitar respuestas en cache (304) para que la API siempre devuelva datos frescos
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const user = req.user || {};
-    const reqAlmacenId = req.query.almacenId ? parseInt(req.query.almacenId, 10) : null;
-    const userAlmacenId = user.rol === 'vendedor' ? user.almacenId : null;
-    const targetAlmacenId = reqAlmacenId || userAlmacenId;
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && user.rol !== 'admin') return;
+    const targetAlmacenId = scopedAlmacenId;
 
-    const ProductoAlmacen = require('../models/ProductoAlmacen');
-    const Almacen = require('../models/Almacen');
+    const { obtenerProductosCriticos } = require('../utils/stockCritico');
+    const todasAlertas = await obtenerProductosCriticos({ almacenId: targetAlmacenId });
 
     if (targetAlmacenId) {
-      // Filtrar alertas para un almacén específico
-      const results = await ProductoAlmacen.findAll({
-        where: { almacenId: targetAlmacenId },
-        include: [{
-          model: Producto,
-          where: {}
-        }]
-      });
-
-      const alertas = results
-        .filter(r => {
-          const p = r.Producto;
-          if (!p) return false;
-          const isServicio = p.tipo === 'servicio' || (p.categoria && p.categoria.toLowerCase().includes('servicio'));
-          if (isServicio) return false;
-          const minStock = (p.stock_minimo !== undefined && p.stock_minimo !== null && p.stock_minimo !== '') ? Number(p.stock_minimo) : 5;
-          const st = Number(r.stock || 0);
-          return st <= minStock || st <= 0;
-        })
-        .map(r => ({
-          id: r.Producto.id,
-          nombre: r.Producto.nombre,
-          categoria: r.Producto.categoria,
-          marca: r.Producto.marca,
-          modelo: r.Producto.modelo,
-          stock: Number(r.stock || 0),
-          stock_minimo: (r.Producto.stock_minimo !== undefined && r.Producto.stock_minimo !== null && r.Producto.stock_minimo !== '') ? Number(r.Producto.stock_minimo) : 5,
-          foto: r.Producto.foto
-        }));
-
+      // Filtrado para un almacén específico
+      const alertas = todasAlertas.map(a => ({
+        id: a.productoId,
+        nombre: a.nombre,
+        categoria: a.categoria,
+        marca: a.marca,
+        modelo: a.modelo,
+        stock: a.stockSede,
+        stockSede: a.stockSede,
+        stockTotal: a.stockTotal,
+        stock_minimo: a.stock_minimo,
+        foto: a.foto,
+        estado: a.estado,
+        almacenId: a.almacenId,
+        almacenNombre: a.almacenNombre
+      }));
       return res.json(alertas);
     }
 
-    // Visión consolidada global (Admin o sin filtro de almacén)
-    const productos = await Producto.findAll({
-      where: {},
-      include: [{
-        model: Almacen,
-        as: 'almacenes',
-        through: { attributes: ['stock'] }
-      }]
-    });
-
-    const alertas = [];
-
-    for (const p of productos) {
-      const isServicio = p.tipo === 'servicio' || (p.categoria && p.categoria.toLowerCase().includes('servicio'));
-      if (isServicio) continue;
-
-      const almacenesList = p.almacenes || [];
-      let totalStock = 0;
-
-      if (almacenesList.length > 0) {
-        totalStock = almacenesList.reduce((sum, a) => sum + (a.ProductoAlmacen ? Number(a.ProductoAlmacen.stock || 0) : 0), 0);
-      } else {
-        totalStock = Number(p.stock || 0);
-      }
-
-      // Sincronizar columna stock en productos si estaba desalineada
-      if (p.stock !== totalStock) {
-        p.stock = totalStock;
-        await p.save().catch(() => {});
-      }
-
-      const minStock = (p.stock_minimo !== undefined && p.stock_minimo !== null && p.stock_minimo !== '') ? Number(p.stock_minimo) : 5;
-
-      if (totalStock <= minStock || totalStock <= 0) {
-        alertas.push({
-          id: p.id,
-          nombre: p.nombre,
-          categoria: p.categoria,
-          marca: p.marca,
-          modelo: p.modelo,
-          stock: totalStock,
-          stock_minimo: minStock,
-          foto: p.foto
+    // Visión consolidada global: consolidar por producto único mostrando stockTotal
+    const mapaProductos = new Map();
+    for (const a of todasAlertas) {
+      if (!mapaProductos.has(a.productoId)) {
+        mapaProductos.set(a.productoId, {
+          id: a.productoId,
+          nombre: a.nombre,
+          categoria: a.categoria,
+          marca: a.marca,
+          modelo: a.modelo,
+          stock: a.stockTotal,
+          stockTotal: a.stockTotal,
+          stock_minimo: a.stock_minimo,
+          foto: a.foto,
+          estado: a.estado
         });
       }
     }
 
+    const alertas = Array.from(mapaProductos.values());
     res.json(alertas);
   } catch (err) {
     console.error('[reportes_alertas] error:', err);
@@ -106,4 +64,3 @@ router.get('/alertas-inventario', authToken, async (req, res) => {
 });
 
 module.exports = router;
-

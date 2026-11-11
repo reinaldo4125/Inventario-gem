@@ -216,7 +216,7 @@ function Caja({ usuario }) {
             </span>
             {cajaActiva && (
               <div style={{ marginTop: '8px', color: '#2d3748', fontSize: '13px' }}>
-                <b>Cajero / Usuario:</b> {cajaActiva.usuarioNombre} | <b>Apertura:</b> {new Date(cajaActiva.fecha_apertura).toLocaleString('es-CO')}
+                <b>Cajero / Usuario:</b> {cajaActiva.usuarioNombre} | <b>Apertura:</b> {new Date(cajaActiva.fecha_apertura).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
                 {cajaActiva.observaciones && <div style={{ color: '#718096', fontStyle: 'italic', marginTop: '2px' }}>"{cajaActiva.observaciones}"</div>}
               </div>
             )}
@@ -349,8 +349,8 @@ function Caja({ usuario }) {
                     <tr key={c.id} style={{ borderBottom: '1px solid #edf2f7' }}>
                       <td style={{ padding: '10px 14px', fontWeight: 700, color: '#2b6cb0' }}>#{c.id}</td>
                       <td style={{ padding: '10px', fontWeight: 600, color: '#2d3748' }}>{c.usuarioNombre}</td>
-                      <td style={{ padding: '10px', color: '#4a5568' }}>{c.fecha_apertura ? new Date(c.fecha_apertura).toLocaleString('es-CO') : '-'}</td>
-                      <td style={{ padding: '10px', color: '#4a5568' }}>{c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleString('es-CO') : '-'}</td>
+                      <td style={{ padding: '10px', color: '#4a5568' }}>{c.fecha_apertura ? new Date(c.fecha_apertura).toLocaleString('es-CO', { timeZone: 'America/Bogota' }) : '-'}</td>
+                      <td style={{ padding: '10px', color: '#4a5568' }}>{c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleString('es-CO', { timeZone: 'America/Bogota' }) : '-'}</td>
                       <td style={{ padding: '10px', textAlign: 'right', color: '#2b6cb0' }}>{formatCurrency(c.monto_apertura || 0)}</td>
                       <td style={{ padding: '10px', textAlign: 'right', color: '#4a5568', fontWeight: 600 }}>{isClosed ? formatCurrency(c.monto_esperado || 0) : '-'}</td>
                       <td style={{ padding: '10px', textAlign: 'right', fontWeight: 700, color: '#276749' }}>{isClosed ? formatCurrency(c.monto_cierre || 0) : '-'}</td>

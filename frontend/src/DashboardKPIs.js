@@ -1,8 +1,9 @@
 import React from 'react';
 import { formatCurrency } from './utils/formatters';
+import { puede } from './config/permisos';
 
 const DashboardKPIs = ({ kpis, usuario, stockPorAlmacen = [] }) => {
-  const cards = [
+  const allCards = [
     {
       title: 'Ventas hoy',
       value: kpis.ventasHoy ?? 0,
@@ -54,6 +55,10 @@ const DashboardKPIs = ({ kpis, usuario, stockPorAlmacen = [] }) => {
       isCurrency: false
     }
   ];
+
+  const cards = puede(usuario, 'dashboard.ver') 
+    ? allCards 
+    : allCards.filter(c => c.title === 'Stock crítico');
 
   return (
     <div style={{ maxWidth: 1150, margin: '0 auto 32px' }}>

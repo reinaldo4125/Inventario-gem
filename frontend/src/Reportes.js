@@ -2,7 +2,7 @@ import React, { useEffect, useState, useContext, useCallback, useMemo } from 're
 import './multinyectores.css';
 import ReportesGanancia from './ReportesGanancia';
 import ProductoCostosAdmin from './ProductoCostosAdmin';
-import { formatCurrency } from './utils/formatters';
+import { formatCurrency, hoyColombia } from './utils/formatters';
 import { AuthContext } from './AuthContext';
 
 import { 
@@ -153,7 +153,7 @@ function Reportes() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Ranking Productos');
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([excelBuffer], { type: 'application/octet-stream' }), `Ranking_Productos_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    saveAs(new Blob([excelBuffer], { type: 'application/octet-stream' }), `Ranking_Productos_${hoyColombia()}.xlsx`);
   };
 
   const exportarRankingPDF = () => {
@@ -161,7 +161,7 @@ function Reportes() {
     doc.setFontSize(14);
     doc.text('MULTINYECTORES Y REPUESTOS - RANKING DE PRODUCTOS', 14, 16);
     doc.setFontSize(10);
-    doc.text(`Fecha Reporte: ${new Date().toLocaleDateString()}`, 14, 22);
+    doc.text(`Fecha Reporte: ${new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}`, 14, 22);
 
     tableToPdf(doc, {
       startY: 28,
@@ -176,7 +176,7 @@ function Reportes() {
       ])
     });
 
-    savePdf(doc, `Ranking_Productos_${new Date().toISOString().slice(0, 10)}.pdf`);
+    savePdf(doc, `Ranking_Productos_${hoyColombia()}.pdf`);
   };
 
   const exportarAlertasExcel = () => {
@@ -194,7 +194,7 @@ function Reportes() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Alertas Inventario');
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([excelBuffer], { type: 'application/octet-stream' }), `Alertas_Stock_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    saveAs(new Blob([excelBuffer], { type: 'application/octet-stream' }), `Alertas_Stock_${hoyColombia()}.xlsx`);
   };
 
   return (

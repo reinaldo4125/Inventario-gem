@@ -32,6 +32,7 @@ import './users.css';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { createDoc, tableToPdf, savePdf } from './utils/pdfUtils';
+import { nombreRol } from './config/permisos';
 
 const initialForm = {
   nombre: '',
@@ -857,10 +858,10 @@ function Users({ usuario }) {
             style={{ width: 'auto', minWidth: '140px' }}
           >
             <option value="">Todos los Roles</option>
-            <option value="admin">Admin General</option>
-            <option value="admin_pos">Admin Punto de Venta</option>
+            <option value="admin">Administrador General</option>
+            <option value="admin_pos">Administrador de Punto</option>
             <option value="vendedor">Vendedor</option>
-            <option value="almacen">Almacén</option>
+            <option value="almacen">Encargado de Almacén</option>
           </select>
 
           <select 
@@ -943,7 +944,7 @@ function Users({ usuario }) {
                       background: u.rol === 'admin' ? '#ebf8ff' : u.rol === 'admin_pos' ? '#faf5ff' : u.rol === 'vendedor' ? '#feebc8' : '#e6fffa',
                       color: u.rol === 'admin' ? '#2b6cb0' : u.rol === 'admin_pos' ? '#6b46c1' : u.rol === 'vendedor' ? '#c05621' : '#234e52'
                     }}>
-                      {u.rol === 'admin_pos' ? 'Admin Sede' : u.rol === 'admin' ? 'Admin Global' : u.rol}
+                      {nombreRol(u.rol)}
                     </span>
                     {u.cargo && (
                       <div style={{ fontSize: '12px', color: '#4a5568', marginTop: '2px', fontWeight: 500 }}>

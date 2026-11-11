@@ -6,8 +6,9 @@ import {
   MdInventory, MdPeople, MdWarning, MdAttachMoney, MdClose
 } from 'react-icons/md';
 import { FaWarehouse, FaCity, FaMapMarkerAlt, FaExchangeAlt } from 'react-icons/fa';
+import { puede } from './config/permisos';
 
-function Almacenes({ usuario }) {
+function Almacenes({ usuario, onNavigate }) {
   const [almacenes, setAlmacenes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -57,7 +58,7 @@ function Almacenes({ usuario }) {
   const [listaTraslados, setListaTraslados] = useState([]);
   const [loadingTraslados, setLoadingTraslados] = useState(false);
 
-  const isAdmin = usuario?.rol === 'admin';
+  const isAdmin = puede(usuario, 'almacenes.gestionar');
   const token = usuario?.token || localStorage.getItem('token') || '';
 
   const cargarAlmacenes = () => {
@@ -102,7 +103,9 @@ function Almacenes({ usuario }) {
   // KPIs globales
   const totalSedes = almacenes.length;
   const totalStockConsolidado = almacenes.reduce((acc, a) => acc + Number(a.totalStock || 0), 0);
-  const valorizacionConsolidada = almacenes.reduce((acc, a) => acc + Number(a.totalValoracion || 0), 0);
+  const valorCostoConsolidado = almacenes.reduce((acc, a) => acc + Number(a.valorCosto || a.totalValoracion || 0), 0);
+  const valorVentaConsolidado = almacenes.reduce((acc, a) => acc + Number(a.valorVenta || 0), 0);
+  const totalSinCostoConsolidado = almacenes.reduce((acc, a) => acc + Number(a.productosSinCosto || 0), 0);
   const totalPersonalAsignado = almacenes.reduce((acc, a) => acc + Number(a.usuariosAsignados || 0), 0);
 
   // Handlers
@@ -394,9 +397,26 @@ function Almacenes({ usuario }) {
         </div>
 
         <div className="card" style={{ padding: '16px', background: '#ffffff', borderRadius: '10px', borderLeft: '4px solid #805ad5', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: '12px', color: '#718096', textTransform: 'uppercase', fontWeight: 600 }}>Valoración Total</div>
-          <div style={{ fontSize: '22px', fontWeight: 700, color: '#553c9a', marginTop: '4px' }}>{formatCurrency(valorizacionConsolidada)}</div>
-          <div style={{ fontSize: '12px', color: '#4a5568', marginTop: '2px' }}>Valor en inventario físico</div>
+          <div style={{ fontSize: '12px', color: '#718096', textTransform: 'uppercase', fontWeight: 600 }}>Valor Inventario</div>
+          <div style={{ marginTop: '4px' }}>
+            {puede(usuario, 'costos.ver') && (
+              <div style={{ fontSize: '13px', color: '#4a5568' }}>
+                Valor a costo: <b style={{ color: '#553c9a', fontSize: '16px' }}>{formatCurrency(valorCostoConsolidado)}</b>
+              </div>
+            )}
+            <div style={{ fontSize: '13px', color: '#4a5568', marginTop: '2px' }}>
+              Valor a precio de venta: <b style={{ color: '#2b6cb0', fontSize: '15px' }}>{formatCurrency(valorVentaConsolidado)}</b>
+            </div>
+          </div>
+          {puede(usuario, 'costos.ver') && (
+            <div 
+              onClick={() => { if (onNavigate) onNavigate('productos'); }}
+              style={{ fontSize: '11px', color: '#e53e3e', fontWeight: 600, marginTop: '6px', cursor: onNavigate ? 'pointer' : 'default' }}
+              title={onNavigate ? "Ir a productos" : ""}
+            >
+              ⚠️ {totalSinCostoConsolidado} productos sin costo
+            </div>
+          )}
         </div>
 
         <div className="card" style={{ padding: '16px', background: '#ffffff', borderRadius: '10px', borderLeft: '4px solid #dd6b20', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
@@ -498,8 +518,18 @@ function Almacenes({ usuario }) {
                       </span>
                     </td>
 
-                    <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700, color: '#276749' }}>
-                      {formatCurrency(a.totalValoracion || 0)}
+                    <td style={{ padding: '12px', textAlign: 'right' }}>
+                      <div style={{ fontWeight: 700, color: '#553c9a' }}>
+                        Costo: {formatCurrency(a.valorCosto ?? a.totalValoracion ?? 0)}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#2b6cb0', fontWeight: 600 }}>
+                        Venta: {formatCurrency(a.valorVenta ?? 0)}
+                      </div>
+                      {Number(a.productosSinCosto || 0) > 0 && (
+                        <div style={{ fontSize: '10px', color: '#e53e3e', fontWeight: 600, marginTop: '2px' }}>
+                          ⚠️ {a.productosSinCosto} sin costo
+                        </div>
+                      )}
                     </td>
 
                     <td style={{ padding: '12px', textAlign: 'center' }}>

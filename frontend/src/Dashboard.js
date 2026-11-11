@@ -13,6 +13,7 @@ import DashboardKPIs from './DashboardKPIs';
 import DashboardFiltros from './DashboardFiltros';
 // importación duplicada eliminada
 import { formatCurrency } from './utils/formatters';
+import { puede } from './config/permisos';
 
 function Dashboard({ usuario, onNavigate }) {
   // Ventas pendientes vs facturadas por día
@@ -49,6 +50,7 @@ function Dashboard({ usuario, onNavigate }) {
   };
 
   useEffect(() => {
+    if (!puede(usuario, 'dashboard.ver')) return;
     setPendFactLoading(true);
     setPendFactError(null);
   const params = [];
@@ -153,6 +155,7 @@ function Dashboard({ usuario, onNavigate }) {
 
   // Refrescar datos al cambiar almacén (admin) o almacén asignado (vendedor)
   useEffect(() => {
+    if (!puede(usuario, 'dashboard.ver')) return;
     if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
     debounceTimeout.current = setTimeout(() => {
       const params = [];
@@ -392,11 +395,11 @@ function Dashboard({ usuario, onNavigate }) {
 
   // Gráfica de productos en stock mínimo
   const stockMinimoData = {
-    labels: stockMinimo.map(p => p.nombre),
+    labels: stockMinimo.map(p => p.almacenNombre ? `${p.nombre} (${p.almacenNombre})` : p.nombre),
     datasets: [
       {
         label: 'Stock actual',
-        data: stockMinimo.map(p => p.stock),
+        data: stockMinimo.map(p => (p.stockSede !== undefined && p.stockSede !== null ? p.stockSede : p.stock) || 0),
         backgroundColor: '#e53e3e',
         borderRadius: 8,
         maxBarThickness: 40
@@ -416,12 +419,12 @@ function Dashboard({ usuario, onNavigate }) {
   };
 
   // Utilidades para totales
-  const totalVentas = ventasMensuales.data.reduce((a, b) => a + b, 0);
-  const totalIngresos = ingresosMensuales.data.reduce((a, b) => a + Number(b), 0);
-  const totalProductos = rankingProductos.data.reduce((a, b) => a + b, 0);
-  const totalServicios = rankingServicios.data.reduce((a, b) => a + b, 0);
-  const totalClientes = clientesTop.data.reduce((a, b) => a + Number(b), 0);
-  const totalPagos = metodosPago.data.reduce((a, b) => a + b, 0);
+  const totalVentas = ventasMensuales.data.reduce((a, b) => a + Number(b || 0), 0);
+  const totalIngresos = ingresosMensuales.data.reduce((a, b) => a + Number(b || 0), 0);
+  const totalProductos = rankingProductos.data.reduce((a, b) => a + Number(b || 0), 0);
+  const totalServicios = rankingServicios.data.reduce((a, b) => a + Number(b || 0), 0);
+  const totalClientes = clientesTop.data.reduce((a, b) => a + Number(b || 0), 0);
+  const totalPagos = metodosPago.data.reduce((a, b) => a + Number(b || 0), 0);
 
   return (
     <div style={{ padding: '0 12px 40px' }}>
@@ -463,14 +466,16 @@ function Dashboard({ usuario, onNavigate }) {
       <DashboardKPIs kpis={kpis} usuario={usuario} stockPorAlmacen={stockPorAlmacen} />
 
       {/* Filtros dinámicos */}
-      <DashboardFiltros filtros={filtros} setFiltros={setFiltros} vendedores={vendedores} clientesList={clientesList} />
+      {puede(usuario, 'dashboard.ver') && (
+        <DashboardFiltros filtros={filtros} setFiltros={setFiltros} vendedores={vendedores} clientesList={clientesList} />
+      )}
 
       {/* Tabla de Alertas de Inventario / Stock Crítico */}
       {stockMinimo && stockMinimo.length > 0 && (
         <div style={{ maxWidth: 1150, margin: '0 auto 32px', background: '#ffffff', borderRadius: 12, border: '1px solid #fecaca', boxShadow: '0 4px 12px rgba(0,0,0,0.04)', padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div style={{ fontWeight: '700', fontSize: '16px', color: '#991b1b', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>⚠️</span> Alertas de Stock Mínimo ({stockMinimo.length} productos)
+              <span>⚠️</span> Alertas de Stock Mínimo ({stockMinimo.length} registros)
             </div>
             {onNavigate && (
               <button 
@@ -485,39 +490,52 @@ function Dashboard({ usuario, onNavigate }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ background: '#fff5f5', borderBottom: '2px solid #fecaca', color: '#7f1d1d', textAlign: 'left' }}>
-                  <th style={{ padding: '10px 12px' }}>Código</th>
+                  <th style={{ padding: '10px 12px' }}>Código OEM</th>
                   <th style={{ padding: '10px 12px' }}>Producto</th>
                   <th style={{ padding: '10px 12px' }}>Categoría</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'center' }}>Stock Actual</th>
+                  <th style={{ padding: '10px 12px' }}>Sede</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'center' }}>Stock Sede</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'center' }}>Stock Total</th>
                   <th style={{ padding: '10px 12px', textAlign: 'center' }}>Stock Mínimo</th>
                   <th style={{ padding: '10px 12px', textAlign: 'center' }}>Estado</th>
                 </tr>
               </thead>
               <tbody>
-                {stockMinimo.slice(0, 10).map((prod, idx) => (
-                  <tr key={prod.id || idx} style={{ borderBottom: '1px solid #fee2e2' }}>
-                    <td style={{ padding: '10px 12px', fontFamily: 'monospace', color: '#64748b' }}>{prod.codigo || `-`}</td>
-                    <td style={{ padding: '10px 12px', fontWeight: '600', color: '#1e293b' }}>{prod.nombre}</td>
-                    <td style={{ padding: '10px 12px', color: '#64748b' }}>{prod.categoria || 'General'}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '700', color: prod.stock === 0 ? '#dc2626' : '#d97706' }}>
-                      {prod.stock}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748b' }}>{prod.stock_minimo || 5}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      <span style={{
-                        padding: '3px 8px',
-                        borderRadius: '12px',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        backgroundColor: prod.stock === 0 ? '#fef2f2' : '#fffbeb',
-                        color: prod.stock === 0 ? '#991b1b' : '#92400e',
-                        border: `1px solid ${prod.stock === 0 ? '#fecaca' : '#fef08a'}`
-                      }}>
-                        {prod.stock === 0 ? '🔴 AGOTADO' : '🟡 BAJO MÍNIMO'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {stockMinimo.slice(0, 10).map((prod, idx) => {
+                  const stockSedeVal = prod.stockSede !== undefined && prod.stockSede !== null ? prod.stockSede : (prod.stock || 0);
+                  const stockTotalVal = prod.stockTotal !== undefined && prod.stockTotal !== null ? prod.stockTotal : stockSedeVal;
+                  const minStockVal = prod.stock_minimo !== undefined && prod.stock_minimo !== null ? prod.stock_minimo : 0;
+                  const esAgotado = prod.estado === 'AGOTADO' || stockTotalVal <= 0;
+
+                  return (
+                    <tr key={prod.id || `${prod.productoId}-${prod.almacenId}` || idx} style={{ borderBottom: '1px solid #fee2e2' }}>
+                      <td style={{ padding: '10px 12px', fontFamily: 'monospace', color: '#64748b' }}>{prod.codigo_oem || prod.codigo || `-`}</td>
+                      <td style={{ padding: '10px 12px', fontWeight: '600', color: '#1e293b' }}>{prod.nombre}</td>
+                      <td style={{ padding: '10px 12px', color: '#64748b' }}>{prod.categoria || 'General'}</td>
+                      <td style={{ padding: '10px 12px', color: '#1e293b', fontWeight: '500' }}>{prod.almacenNombre || 'General'}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '700', color: stockSedeVal === 0 ? '#dc2626' : '#d97706' }}>
+                        {stockSedeVal}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '600', color: '#475569' }}>
+                        {stockTotalVal}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', color: '#64748b' }}>{minStockVal}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '3px 8px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          backgroundColor: esAgotado ? '#fef2f2' : '#fffbeb',
+                          color: esAgotado ? '#991b1b' : '#92400e',
+                          border: `1px solid ${esAgotado ? '#fecaca' : '#fef08a'}`
+                        }}>
+                          {esAgotado ? '🔴 AGOTADO' : '🟡 BAJO MÍNIMO'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -525,13 +543,14 @@ function Dashboard({ usuario, onNavigate }) {
       )}
 
       {/* Grid de gráficas */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-        gap: 20,
-        margin: '0 auto',
-        maxWidth: 1150
-      }}>
+      {puede(usuario, 'dashboard.ver') && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+          gap: 20,
+          margin: '0 auto',
+          maxWidth: 1150
+        }}>
         {/* Net revenue trend */}
         <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', padding: 18 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
@@ -683,6 +702,7 @@ function Dashboard({ usuario, onNavigate }) {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

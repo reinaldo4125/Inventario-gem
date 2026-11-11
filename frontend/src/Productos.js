@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { formatCurrency, formatNumber, parsePrecio } from './utils/formatters';
+import { formatCurrency, formatNumber, parsePrecio, hoyColombia } from './utils/formatters';
 import FieldError from './components/FieldError';
 import { downloadTemplateProductosCSV, parseCSVText } from './utils/csvImportHelper';
 import { 
@@ -8,6 +8,7 @@ import {
   MdPlace, MdLocalShipping, MdAttachMoney, MdHistory
 } from 'react-icons/md';
 import { FaWarehouse, FaBoxOpen, FaLayerGroup, FaTag } from 'react-icons/fa';
+import { puede } from './config/permisos';
 
 function Productos({ usuario }) {
   const [productos, setProductos] = useState([]);
@@ -26,7 +27,7 @@ function Productos({ usuario }) {
     compatibilidad: '', 
     codigo_oem: '', 
     costo: '',
-    stock_minimo: '5',
+    stock_minimo: '1',
     ubicacion_bodega: '',
     unidad_medida: 'Unidad',
     proveedor: '',
@@ -58,6 +59,7 @@ function Productos({ usuario }) {
   const [filtroCategoria, setFiltroCategoria] = useState('');
   const [filtroMarca, setFiltroMarca] = useState('');
   const [filtroStockCritico, setFiltroStockCritico] = useState(false);
+  const [filtroSinCosto, setFiltroSinCosto] = useState(false);
   const [selectedAlmacen, setSelectedAlmacen] = useState('');
   const [almacenes, setAlmacenes] = useState([]);
 
@@ -165,7 +167,12 @@ function Productos({ usuario }) {
   const precioAlmacenRef = useRef(null);
   const stockRefs = useRef({});
 
-  const isAdmin = usuario?.rol === 'admin';
+  const puedeGestionarAlmacenes = puede(usuario, 'almacenes.gestionar');
+  const puedeCrear = puede(usuario, 'productos.crear');
+  const puedeEditar = puede(usuario, 'productos.editar');
+  const puedeAjustarStock = puede(usuario, 'stock.ajustar');
+  const puedeVerKardex = puede(usuario, 'kardex.ver');
+  const puedeVerCostos = puede(usuario, 'costos.ver');
   const token = usuario?.token || localStorage.getItem('token') || '';
 
   const cargarProductos = () => {
@@ -187,7 +194,7 @@ function Productos({ usuario }) {
 
   useEffect(() => {
     let isMounted = true;
-    if (isAdmin) {
+    if (puedeGestionarAlmacenes) {
       fetch('/almacenes', { headers: { 'Authorization': token ? `Bearer ${token}` : '' } })
         .then(r => r.json())
         .then(data => { if (isMounted) setAlmacenes(Array.isArray(data) ? data : []); })
@@ -211,10 +218,11 @@ function Productos({ usuario }) {
 
     const totalStock = Array.isArray(p.almacenes)
       ? p.almacenes.reduce((acc, a) => acc + Number(a.stock || 0), 0)
-      : Number(p.stock || 0);
+      : 0;
 
-    const minStock = (p.stock_minimo !== undefined && p.stock_minimo !== null && p.stock_minimo !== '') ? Number(p.stock_minimo) : 5;
+    const minStock = (p.stock_minimo !== undefined && p.stock_minimo !== null && p.stock_minimo !== '') ? Number(p.stock_minimo) : 0;
     const isServ = p.tipo === 'servicio' || (p.categoria && p.categoria.toLowerCase().includes('servicio'));
+    const esCritico = minStock > 0 ? (totalStock <= minStock) : (totalStock <= 0);
 
     const matchSearch = !search || 
       p.nombre?.toLowerCase().includes(search.toLowerCase()) ||
@@ -227,9 +235,11 @@ function Productos({ usuario }) {
     const matchTipo = filtroTipo === 'todos' || (filtroTipo === 'servicio' ? isServ : !isServ);
     const matchCat = !filtroCategoria || p.categoria === filtroCategoria;
     const matchMarca = !filtroMarca || p.marca === filtroMarca;
-    const matchCritico = !filtroStockCritico || (!isServ && (totalStock <= minStock || totalStock <= 0));
+    const matchCritico = !filtroStockCritico || (!isServ && esCritico);
+    const sinCosto = (!p.costo || Number(p.costo) <= 0) && !isServ;
+    const matchSinCosto = !filtroSinCosto || sinCosto;
 
-    return matchSearch && matchTipo && matchCat && matchMarca && matchCritico;
+    return matchSearch && matchTipo && matchCat && matchMarca && matchCritico && matchSinCosto;
   });
 
   // KPI Calculations
@@ -245,18 +255,34 @@ function Productos({ usuario }) {
     if (p.activo === false || p.activo === 0 || p.activo === '0') return false;
     const isServ = p.tipo === 'servicio' || (p.categoria && p.categoria.toLowerCase().includes('servicio'));
     if (isServ) return false;
-    const st = Array.isArray(p.almacenes) ? p.almacenes.reduce((sum, a) => sum + Number(a.stock || 0), 0) : Number(p.stock || 0);
-    const minStock = (p.stock_minimo !== undefined && p.stock_minimo !== null && p.stock_minimo !== '') ? Number(p.stock_minimo) : 5;
-    return st <= minStock || st <= 0;
+    const st = Array.isArray(p.almacenes) ? p.almacenes.reduce((sum, a) => sum + Number(a.stock || 0), 0) : 0;
+    const minStock = (p.stock_minimo !== undefined && p.stock_minimo !== null && p.stock_minimo !== '') ? Number(p.stock_minimo) : 0;
+    return minStock > 0 ? st <= minStock : st <= 0;
   }).length;
 
-  const valorInventario = productosFiltrados.reduce((acc, p) => {
+  const valorCosto = productosFiltrados.reduce((acc, p) => {
     const isServ = p.tipo === 'servicio' || (p.categoria && p.categoria.toLowerCase().includes('servicio'));
     if (isServ) return acc;
+    const c = Number(p.costo || 0);
+    if (c <= 0) return acc;
     const st = Array.isArray(p.almacenes) ? p.almacenes.reduce((sum, a) => sum + Number(a.stock || 0), 0) : Number(p.stock || 0);
-    const priceUnit = Number(p.costo || p.precio_detal || p.precio || 0);
-    return acc + (st * priceUnit);
+    return acc + (st * c);
   }, 0);
+
+  const valorVenta = productosFiltrados.reduce((acc, p) => {
+    const isServ = p.tipo === 'servicio' || (p.categoria && p.categoria.toLowerCase().includes('servicio'));
+    if (isServ) return acc;
+    const pVenta = Number(p.precio_detal || p.precio || 0);
+    const st = Array.isArray(p.almacenes) ? p.almacenes.reduce((sum, a) => sum + Number(a.stock || 0), 0) : Number(p.stock || 0);
+    return acc + (st * pVenta);
+  }, 0);
+
+  const cantSinCosto = productos.filter(p => {
+    if (p.activo === false || p.activo === 0 || p.activo === '0') return false;
+    const isServ = p.tipo === 'servicio' || (p.categoria && p.categoria.toLowerCase().includes('servicio'));
+    if (isServ) return false;
+    return !p.costo || Number(p.costo) <= 0;
+  }).length;
 
   // Counts for filter pills
   const cantProdFisicos = productos.filter(p => p.tipo !== 'servicio' && (!p.categoria || !p.categoria.toLowerCase().includes('servicio'))).length;
@@ -292,7 +318,7 @@ function Productos({ usuario }) {
       compatibilidad: producto.compatibilidad || '',
       codigo_oem: producto.codigo_oem || '',
       costo: producto.costo !== undefined && producto.costo !== null ? String(producto.costo) : '',
-      stock_minimo: producto.stock_minimo !== undefined && producto.stock_minimo !== null ? String(producto.stock_minimo) : '5',
+      stock_minimo: producto.stock_minimo !== undefined && producto.stock_minimo !== null ? String(producto.stock_minimo) : '1',
       ubicacion_bodega: producto.ubicacion_bodega || '',
       unidad_medida: producto.unidad_medida || (isServ ? 'Servicio' : 'Unidad'),
       proveedor: producto.proveedor || '',
@@ -512,7 +538,7 @@ function Productos({ usuario }) {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Inventario_Multinyectores_${new Date().toISOString().slice(0,10)}.csv`);
+    link.setAttribute("download", `Inventario_Multinyectores_${hoyColombia()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -532,6 +558,12 @@ function Productos({ usuario }) {
 
     if (!form.nombre || !String(form.nombre).trim()) {
       setFormError('El nombre del producto es obligatorio');
+      setLoading(false);
+      return;
+    }
+
+    if (form.tipo !== 'servicio' && (costoParsed === null || costoParsed <= 0)) {
+      setFormError('Falta el costo');
       setLoading(false);
       return;
     }
@@ -558,7 +590,7 @@ function Productos({ usuario }) {
         precio_detal: Number(precioDetalParsed),
         precio_mayor: Number(precioMayorParsed),
         precio_almacen: Number(precioAlmacenParsed),
-        stock_minimo: Number(form.stock_minimo || 5),
+        stock_minimo: (form.stock_minimo !== '' && form.stock_minimo !== null && form.stock_minimo !== undefined) ? Number(form.stock_minimo) : 1,
         foto: fotoUrl
       };
 
@@ -672,7 +704,7 @@ function Productos({ usuario }) {
                   boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)',
                   width: '230px', zIndex: 100, overflow: 'hidden'
                 }}>
-                  {isAdmin && (
+                  {puedeCrear && (
                     <button
                       type="button"
                       onClick={() => {
@@ -697,7 +729,7 @@ function Productos({ usuario }) {
                     </button>
                   )}
 
-                  {isAdmin && (
+                  {puedeCrear && (
                     <button
                       type="button"
                       onClick={() => {
@@ -742,7 +774,7 @@ function Productos({ usuario }) {
           </div>
 
           {/* ACCIONES DE SERVICIOS */}
-          {isAdmin && (
+          {puedeCrear && (
             <div style={{ position: 'relative' }}>
               <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid #6b46c1' }}>
                 <button
@@ -807,7 +839,7 @@ function Productos({ usuario }) {
           )}
 
           {/* BOTÓN PRINCIPAL NUEVO PRODUCTO */}
-          {isAdmin && (
+          {puedeCrear && (
             <button 
               type="button"
               onClick={handleNuevoProducto} 
@@ -862,11 +894,37 @@ function Productos({ usuario }) {
           </div>
         </div>
 
-        {usuario?.rol !== 'vendedor' && (
+        {puedeVerCostos && (
           <div className="card" style={{ padding: '16px', background: '#ffffff', borderRadius: '10px', borderLeft: '4px solid #805ad5', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
             <div style={{ fontSize: '12px', color: '#718096', textTransform: 'uppercase', fontWeight: 600 }}>Valor Inventario</div>
-            <div style={{ fontSize: '22px', fontWeight: 700, color: '#553c9a', marginTop: '4px' }}>{formatCurrency(valorInventario)}</div>
-            <div style={{ fontSize: '12px', color: '#4a5568', marginTop: '2px' }}>Valoración de existencias</div>
+            <div style={{ marginTop: '6px' }}>
+              <div style={{ fontSize: '13px', color: '#4a5568' }}>
+                Valor a costo: <b style={{ color: '#553c9a', fontSize: '16px' }}>{formatCurrency(valorCosto)}</b>
+              </div>
+              <div style={{ fontSize: '13px', color: '#4a5568', marginTop: '3px' }}>
+                Valor a precio de venta: <b style={{ color: '#2b6cb0', fontSize: '15px' }}>{formatCurrency(valorVenta)}</b>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFiltroSinCosto(!filtroSinCosto)}
+              style={{
+                background: filtroSinCosto ? '#fed7d7' : '#edf2f7',
+                color: filtroSinCosto ? '#9b2c2c' : '#718096',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '4px 8px',
+                fontSize: '11px',
+                fontWeight: 600,
+                marginTop: '8px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'inline-block'
+              }}
+              title="Haz clic para filtrar productos sin costo"
+            >
+              ⚠️ {cantSinCosto} productos sin costo {filtroSinCosto ? '(Filtro activo - clic para quitar)' : ''}
+            </button>
           </div>
         )}
       </div>
@@ -957,8 +1015,8 @@ function Productos({ usuario }) {
             {marcas.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
 
-          {/* WAREHOUSE SELECTOR (ADMIN) */}
-          {isAdmin && (
+          {/* WAREHOUSE SELECTOR */}
+          {puedeGestionarAlmacenes && (
             <select value={selectedAlmacen} onChange={e => setSelectedAlmacen(e.target.value)} className="input">
               <option value="">Todos los Almacenes</option>
               {almacenes.map(a => <option key={a.id} value={a.id}>{a.nombre || `Almacén ${a.id}`}</option>)}
@@ -1002,7 +1060,7 @@ function Productos({ usuario }) {
                 {Array.isArray(productosFiltrados) && productosFiltrados.length > 0 && Array.isArray(productosFiltrados[0].almacenes) && productosFiltrados[0].almacenes.map(a => (
                   <th key={a.id} style={{ padding: '12px', textAlign: 'center', background: '#e2e8f0' }}>{a.nombre}</th>
                 ))}
-                {isAdmin && <th style={{ padding: '12px 16px', textAlign: 'center' }}>Acciones</th>}
+                {(puedeEditar || puedeCrear || puedeAjustarStock || puedeVerKardex) && <th style={{ padding: '12px 16px', textAlign: 'center' }}>Acciones</th>}
               </tr>
             </thead>
             <tbody>
@@ -1023,11 +1081,11 @@ function Productos({ usuario }) {
                   const isServ = p.tipo === 'servicio' || (p.categoria && p.categoria.toLowerCase().includes('servicio'));
                   const stockTotal = Array.isArray(p.almacenes)
                     ? p.almacenes.reduce((acc, a) => acc + Number(a.stock || 0), 0)
-                    : Number(p.stock || 0);
+                    : 0;
 
-                  const minStock = (p.stock_minimo !== undefined && p.stock_minimo !== null && p.stock_minimo !== '') ? Number(p.stock_minimo) : 5;
-                  const isCritico = !isServ && (stockTotal <= minStock || stockTotal <= 0);
-                  const isBajo = !isServ && !isCritico && stockTotal <= (minStock * 1.5);
+                  const minStock = (p.stock_minimo !== undefined && p.stock_minimo !== null && p.stock_minimo !== '') ? Number(p.stock_minimo) : 0;
+                  const isCritico = !isServ && (minStock > 0 ? stockTotal <= minStock : stockTotal <= 0);
+                  const isBajo = !isServ && !isCritico && minStock > 0 && stockTotal <= (minStock * 1.5);
 
                   return (
                     <tr key={p.id} style={{ borderBottom: '1px solid #edf2f7', transition: 'background 0.15s' }}>
@@ -1108,68 +1166,84 @@ function Productos({ usuario }) {
 
                       {Array.isArray(p.almacenes) && p.almacenes.map(a => (
                         <td key={a.id} style={{ padding: '12px', textAlign: 'center', background: '#f8fafc' }}>
-                          <span style={{ fontWeight: 600, color: a.stock <= minStock ? '#e53e3e' : '#2d3748' }}>
-                            {formatNumber(a.stock)}
-                          </span>
+                          {isServ ? (
+                            <span style={{ color: '#a0aec0', fontWeight: 600 }}>—</span>
+                          ) : (
+                            <span style={{ fontWeight: 600, color: (minStock > 0 && a.stock <= minStock) ? '#e53e3e' : '#2d3748' }}>
+                              {formatNumber(a.stock)}
+                            </span>
+                          )}
                         </td>
                       ))}
 
-                      {isAdmin && (
+                      {(puedeEditar || puedeCrear || puedeAjustarStock || puedeVerKardex) && (
                         <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                           <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                            <button 
-                              className="btn" 
-                              style={{ padding: '6px', background: '#ebf8ff', color: '#3182ce', border: '1px solid #bee3f8' }} 
-                              onClick={() => handleEdit(p)} 
-                              title="Editar información general"
-                            >
-                              <MdEdit size={16} />
-                            </button>
+                            {puedeEditar && (
+                              <button 
+                                className="btn" 
+                                style={{ padding: '6px', background: '#ebf8ff', color: '#3182ce', border: '1px solid #bee3f8' }} 
+                                onClick={() => handleEdit(p)} 
+                                title="Editar información general"
+                              >
+                                <MdEdit size={16} />
+                              </button>
+                            )}
 
-                            <button 
-                              className="btn" 
-                              style={{ padding: '6px', background: '#feebc8', color: '#dd6b20', border: '1px solid #fbd38d' }} 
-                              onClick={() => handleAsignar(p)} 
-                              title="Asignar stock por almacén"
-                            >
-                              <FaWarehouse size={15} />
-                            </button>
+                            {puedeAjustarStock && (
+                              <button 
+                                className="btn" 
+                                style={{ padding: '6px', background: '#feebc8', color: '#dd6b20', border: '1px solid #fbd38d' }} 
+                                onClick={() => handleAsignar(p)} 
+                                title="Asignar stock por almacén"
+                              >
+                                <FaWarehouse size={15} />
+                              </button>
+                            )}
 
-                            <button 
-                              className="btn" 
-                              style={{ padding: '6px', background: '#ebf8ff', color: '#2b6cb0', border: '1px solid #cbd5e0' }} 
-                              onClick={() => handleVerKardex(p)} 
-                              title="Ver Bitácora Kardex / Historial de Movimientos"
-                            >
-                              <MdHistory size={16} />
-                            </button>
+                            {puedeVerKardex && (
+                              <button 
+                                className="btn" 
+                                style={{ padding: '6px', background: '#ebf8ff', color: '#2b6cb0', border: '1px solid #cbd5e0' }} 
+                                onClick={() => handleVerKardex(p)} 
+                                title="Ver Bitácora Kardex / Historial de Movimientos"
+                              >
+                                <MdHistory size={16} />
+                              </button>
+                            )}
 
-                            <button 
-                              className="btn" 
-                              style={{ padding: '6px', background: '#ebf8ff', color: '#2b6cb0', border: '1px solid #cbd5e0' }} 
-                              onClick={() => handleAbrirAjuste(p)} 
-                              title="Ajuste rápido de inventario"
-                            >
-                              <MdInventory size={16} />
-                            </button>
+                            {puedeAjustarStock && (
+                              <button 
+                                className="btn" 
+                                style={{ padding: '6px', background: '#ebf8ff', color: '#2b6cb0', border: '1px solid #cbd5e0' }} 
+                                onClick={() => handleAbrirAjuste(p)} 
+                                title="Ajuste rápido de inventario"
+                              >
+                                <MdInventory size={16} />
+                              </button>
+                            )}
 
-                            <button 
-                              className="btn" 
-                              style={{ padding: '6px', background: '#e2e8f0', color: '#4a5568', border: '1px solid #cbd5e0' }} 
-                              onClick={() => handleDuplicar(p)} 
-                              title="Duplicar / Clonar producto"
-                            >
-                              <MdContentCopy size={16} />
-                            </button>
+                            {puedeCrear && (
+                              <button 
+                                className="btn" 
+                                style={{ padding: '6px', background: '#e2e8f0', color: '#4a5568', border: '1px solid #cbd5e0' }} 
+                                onClick={() => handleDuplicar(p)} 
+                                title="Duplicar / Clonar producto"
+                              >
+                                <MdContentCopy size={16} />
+                              </button>
+                            )}
 
-                            <button 
-                              className="btn" 
-                              style={{ padding: '6px', background: '#fff5f5', color: '#e53e3e', border: '1px solid #fed7d7' }} 
-                              onClick={() => handleDelete(p)} 
-                              title="Eliminar producto"
-                            >
-                              <MdDelete size={16} />
-                            </button>
+                            {puedeEditar && (
+                              <button 
+                                className="btn" 
+                                style={{ padding: '6px', background: '#fff5f5', color: '#e53e3e', border: '1px solid #fed7d7' }} 
+                                onClick={() => handleDelete(p)} 
+                                title="Eliminar producto"
+                              >
+                                <MdDelete size={16} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       )}
@@ -1183,7 +1257,7 @@ function Productos({ usuario }) {
       </div>
 
       {/* MODAL EDITAR / CREAR PRODUCTO */}
-      {isAdmin && showModal && (
+      {(puedeCrear || puedeEditar) && showModal && (
         <div className="modal-backdrop">
           <div className="modal-card card" style={{ maxWidth: '800px', width: '100%', boxSizing: 'border-box' }}>
             <h3 style={{ marginTop: 0, color: form.tipo === 'servicio' ? '#6b46c1' : '#2b6cb0', borderBottom: '2px solid #ebf8ff', paddingBottom: '10px' }}>
@@ -1278,12 +1352,24 @@ function Productos({ usuario }) {
                 <>
                   <div className="form-field">
                     <label style={{ fontWeight: 600 }}>Ubicación en Bodega</label>
-                    <input name="ubicacion_bodega" className="input" value={form.ubicacion_bodega} onChange={handleChange} placeholder="Ej: Estante B-12 / Pasillo 3" />
+                    <select 
+                      name="ubicacion_bodega" 
+                      className="input" 
+                      value={form.ubicacion_bodega} 
+                      onChange={handleChange}
+                    >
+                      <option value="">Selecciona una bodega / almacén</option>
+                      {almacenes.map(a => (
+                        <option key={a.id} value={a.nombre}>
+                          {a.nombre} {a.ciudad ? `(${a.ciudad})` : ''}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="form-field">
                     <label style={{ fontWeight: 600 }}>Stock Mínimo Alerta</label>
-                    <input name="stock_minimo" type="number" className="input" value={form.stock_minimo} onChange={handleChange} placeholder="Ej: 5" min="0" />
+                    <input name="stock_minimo" type="number" className="input" value={form.stock_minimo} onChange={handleChange} placeholder="Ej: 1" min="0" />
                   </div>
 
                   <div className="form-field">
@@ -1323,10 +1409,12 @@ function Productos({ usuario }) {
 
               {/* SECCIÓN DE PRECIOS & COSTOS */}
               <div style={{ gridColumn: '1 / -1', background: '#f7fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', width: '100%', boxSizing: 'border-box' }}>
-                <div style={{ width: '100%', boxSizing: 'border-box' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#4a5568', display: 'block', marginBottom: '4px' }}>Costo Compra ($)</label>
-                  <input ref={costoRef} name="costo" className="input" defaultValue={form.costo} placeholder="Costo" type="text" inputMode="numeric" style={{ width: '100%', boxSizing: 'border-box' }} />
-                </div>
+                {puedeVerCostos && (
+                  <div style={{ width: '100%', boxSizing: 'border-box' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: '#4a5568', display: 'block', marginBottom: '4px' }}>Costo Compra ($)</label>
+                    <input ref={costoRef} name="costo" className="input" defaultValue={form.costo} placeholder="Costo" type="text" inputMode="numeric" style={{ width: '100%', boxSizing: 'border-box' }} />
+                  </div>
+                )}
                 <div style={{ width: '100%', boxSizing: 'border-box' }}>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: '#2b6cb0', display: 'block', marginBottom: '4px' }}>Precio Detal ($)</label>
                   <input ref={precioDetalRef} name="precio_detal" className="input" defaultValue={form.precio_detal} placeholder="Detal" type="text" inputMode="numeric" style={{ width: '100%', boxSizing: 'border-box' }} />
@@ -1341,7 +1429,7 @@ function Productos({ usuario }) {
                 </div>
               </div>
 
-              {marginVal !== null && (
+              {puedeVerCostos && marginVal !== null && (
                 <div style={{ gridColumn: '1 / -1', fontSize: '13px', color: Number(marginVal) >= 20 ? '#276749' : '#c53030', fontWeight: 600 }}>
                   📈 Margen estimado al detal: {marginVal}%
                 </div>
@@ -1371,7 +1459,7 @@ function Productos({ usuario }) {
       )}
 
       {/* MODAL ASIGNAR STOCK POR ALMACÉN */}
-      {isAdmin && showAsignar && productoAsignar && (
+      {puedeAjustarStock && showAsignar && productoAsignar && (
         <div className="modal-backdrop">
           <div className="modal-card card" style={{ maxWidth: '550px', width: '90%' }}>
             <h3 style={{ marginTop: 0, color: '#2b6cb0' }}>🏢 Distribución de Stock por Almacén</h3>
@@ -1445,7 +1533,7 @@ function Productos({ usuario }) {
       )}
 
       {/* MODAL AJUSTE RÁPIDO DE INVENTARIO */}
-      {isAdmin && showAjusteModal && productoAjuste && (
+      {puedeAjustarStock && showAjusteModal && productoAjuste && (
         <div className="modal-backdrop">
           <div className="modal-card card" style={{ maxWidth: '480px', width: '90%' }}>
             <h3 style={{ marginTop: 0, color: '#2b6cb0' }}>📊 Ajuste Rápido de Stock</h3>

@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { authRole, authToken } = require('./auth');
+const auth = require('../middleware/auth');
+const requirePermiso = require('../middleware/roles');
 const router = express.Router();
 const { Empresa } = require('../models');
 
@@ -20,7 +21,7 @@ router.get('/public', async (req, res) => {
 });
 
 // Obtener datos completos de la empresa (requiere token)
-router.get('/', authToken, async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const empresa = await Empresa.findOne();
     if (!empresa) return res.status(404).json({ error: 'No hay datos de empresa' });
@@ -31,7 +32,7 @@ router.get('/', authToken, async (req, res) => {
 });
 
 // Crear o actualizar datos de la empresa
-router.post('/', authRole(['admin']), [
+router.post('/', auth, requirePermiso('empresa.editar'), [
   body('nombre').notEmpty().withMessage('El nombre de la empresa es obligatorio'),
   body('nit').notEmpty().withMessage('El NIT es obligatorio'),
   body('direccion').notEmpty().withMessage('La dirección es obligatoria'),

@@ -4,7 +4,7 @@ services:
     image: mysql:8.0
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: TuPasswordSeguro
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: multinyectores
     ports:
       - '3306:3306'
@@ -23,7 +23,7 @@ services:
       - PORT=4000
       - DB_HOST=db
       - DB_USER=root
-      - DB_PASSWORD=TuPasswordSeguro
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=multinyectores
     depends_on:
       - db

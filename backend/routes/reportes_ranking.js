@@ -1,33 +1,40 @@
 const express = require('express');
 const router = express.Router();
 const { Venta, Producto, DetalleVenta } = require('../models');
-const { authToken } = require('./auth');
+const auth = require('../middleware/auth');
+const requirePermiso = require('../middleware/roles');
+const { almacenDelUsuario } = require('../utils/almacenScope');
 
 // Ranking de productos más vendidos
-router.get('/ranking', authToken, async (req, res) => {
+router.get('/ranking', auth, requirePermiso(['reportes.ver', 'reportes.ver_propios']), async (req, res) => {
   try {
-    // Evitar respuestas en cache (304) para que la API siempre devuelva datos frescos
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    // Agrupa por producto y suma la cantidad vendida
-    // Leer filtros de almacén y vendedor
-    let { almacenId, vendedor } = req.query;
     const user = req.user || {};
-    if (user.rol === 'vendedor') {
-      // Forzar filtro por almacén del vendedor
-      almacenId = user.almacenId;
-      vendedor = user.nombre;
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && user.rol !== 'admin') return;
+
+    const whereVenta = { estado: 'Pagada' };
+    if (scopedAlmacenId) {
+      whereVenta.almacenId = scopedAlmacenId;
     }
-    // Filtrar DetalleVenta por ventas del almacén y vendedor
-    const Venta = require('../models/Venta');
-    const whereVenta = {};
-    if (almacenId) whereVenta.almacenId = almacenId;
-    if (vendedor) whereVenta.vendedor = vendedor;
+    if (user.rol === 'vendedor') {
+      whereVenta.vendedor = user.nombre;
+    } else if (req.query.vendedor) {
+      whereVenta.vendedor = req.query.vendedor;
+    }
+
     // Buscar los IDs de ventas que cumplen los filtros
     const ventasFiltradas = await Venta.findAll({
       where: whereVenta,
       attributes: ['id']
     });
     const ventasIds = ventasFiltradas.map(v => v.id);
+
+    // Si no hay ventas que cumplan los filtros, retornar lista vacía
+    if (ventasIds.length === 0) {
+      return res.json([]);
+    }
+
     // Filtrar DetalleVenta por ventasIds
     const ranking = await DetalleVenta.findAll({
       attributes: [
@@ -41,7 +48,7 @@ router.get('/ranking', authToken, async (req, res) => {
         model: Producto,
         attributes: ['nombre', 'categoria', 'marca', 'modelo', 'foto', 'stock', 'tipo']
       }],
-      where: ventasIds.length ? { ventaId: ventasIds } : {},
+      where: { ventaId: ventasIds },
       group: ['productoId', 'Producto.id'],
       order: [[DetalleVenta.sequelize.literal('total_vendida'), 'DESC']],
       limit: 10

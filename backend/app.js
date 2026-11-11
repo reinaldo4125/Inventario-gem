@@ -95,12 +95,14 @@ const reportesCategoriaRouter = require('./routes/reportes_categoria');
 
 const reportesRankingRouter = require('./routes/reportes_ranking');
 
-// Debug routes (diagnóstico)
-try {
-  const debugRouter = require('./routes/debug');
-  app.use('/debug', debugRouter);
-} catch (e) {
-  console.warn('Debug router not mounted:', e && e.message ? e.message : e);
+// Debug routes (diagnóstico) - Solo en entornos de desarrollo/pruebas
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    const debugRouter = require('./routes/debug');
+    app.use('/debug', debugRouter);
+  } catch (e) {
+    console.warn('Debug router not mounted:', e && e.message ? e.message : e);
+  }
 }
 
 // Health check endpoint
@@ -121,6 +123,9 @@ app.use('/usuarios', usuariosRouter);
 app.use('/productos', productosRouter);
 app.use('/ventas', ventasRouter);
 app.use('/facturas', facturasRouter);
+const carteraRouter = require('./routes/cartera');
+app.use('/cartera', carteraRouter);
+app.use('/api/cartera', carteraRouter);
 app.use('/clientes', clientesRouter);
 
 app.use('/auth', authRouter);
@@ -211,8 +216,14 @@ async function initDb() {
     // Migraciones/columnas adicionales seguras para ventas y facturas
     try { await sequelize.query("ALTER TABLE ventas ADD COLUMN es_cotizacion TINYINT(1) DEFAULT 0;"); } catch (e) {}
     try { await sequelize.query("ALTER TABLE ventas ADD COLUMN metodos_pago TEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE ventas ADD COLUMN anuladaPor VARCHAR(255);"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE ventas ADD COLUMN motivoAnulacion TEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE ventas ADD COLUMN fechaAnulacion DATETIME;"); } catch (e) {}
     try { await sequelize.query("ALTER TABLE facturas ADD COLUMN es_cotizacion TINYINT(1) DEFAULT 0;"); } catch (e) {}
     try { await sequelize.query("ALTER TABLE facturas ADD COLUMN metodos_pago TEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE facturas ADD COLUMN anuladaPor VARCHAR(255);"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE facturas ADD COLUMN motivoAnulacion TEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE facturas ADD COLUMN fechaAnulacion DATETIME;"); } catch (e) {}
 
     // Migraciones/columnas adicionales seguras para almacenes
     try { await sequelize.query("ALTER TABLE almacenes ADD COLUMN codigo VARCHAR(50);"); } catch (e) {}
@@ -258,103 +269,108 @@ async function initDb() {
     try { await sequelize.query("ALTER TABLE productos MODIFY COLUMN foto LONGTEXT;"); } catch (e) {}
     try { await sequelize.query("ALTER TABLE productos MODIFY foto LONGTEXT;"); } catch (e) {}
     try { await sequelize.query("ALTER TABLE productos CHANGE foto foto LONGTEXT;"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE ventas ADD COLUMN token_publico VARCHAR(64);"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE facturas ADD COLUMN token_publico VARCHAR(64);"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE abonos ADD COLUMN token_publico VARCHAR(64);"); } catch (e) {}
+    try { await sequelize.query("ALTER TABLE facturas ADD COLUMN estado VARCHAR(20) DEFAULT 'Pagada';"); } catch (e) {}
+    try { await sequelize.query("UPDATE facturas SET estado = 'Anulada' WHERE fechaAnulacion IS NOT NULL OR notas LIKE '%[ANULADA]%';"); } catch (e) {}
 
     await sequelize.sync({ alter: false });
     if (models.ProductoCosto) {
       await models.ProductoCosto.sync();
     }
+    if (models.Abono) {
+      await models.Abono.sync();
+    }
     console.log('[AI Studio] Esquema de base de datos sincronizado.');
+
+    // Llenar tokens públicos para registros existentes si hiciera falta
+    try {
+      const llenarTokensPublicos = require('./scripts/llenarTokensPublicos');
+      await llenarTokensPublicos();
+    } catch (e) {
+      console.warn('[AI Studio] Advertencia al llenar tokens públicos:', e.message);
+    }
 
     let almacenPrincipal = await models.Almacen.findByPk(1);
     if (!almacenPrincipal) {
       almacenPrincipal = await models.Almacen.create({ id: 1, nombre: 'Almacén Principal', ubicacion: 'Sede Principal' });
     }
 
-    const empresaCount = await models.Empresa.count();
-    if (empresaCount === 0) {
-      await models.Empresa.create({
-        nombre: 'Multinyectores Colombia',
-        nit: '900123456-1',
-        telefono: '+57 300 123 4567',
-        direccion: 'Calle Principal #12-34',
-        correo: 'contacto@multinyectorescolombia.com'
-      });
-    }
-
-    // Crear o actualizar usuario admin con credenciales: admin / Salome2016.
-    const adminHash = await bcrypt.hash('Salome2016.', 10);
-    let adminUsers = await models.Usuario.findAll({ 
-      where: { 
-        [Op.or]: [
-          { correo: 'admin@admin.com' },
-          { correo: 'admin@example.com' },
-          { nombre: 'admin' },
-          { nombre: 'Administrador' },
-          { correo: 'admin' },
-          { rol: 'admin' }
-        ] 
-      } 
-    });
-
-    if (!adminUsers || adminUsers.length === 0) {
-      await models.Usuario.create({
-        nombre: 'Administrador',
-        correo: 'admin@admin.com',
-        rol: 'admin',
-        password: adminHash,
-        activo: 1,
-        almacenId: almacenPrincipal.id
-      });
-      console.log('[AI Studio] Usuario admin inicial creado: admin@admin.com / Salome2016.');
-    } else {
-      for (const user of adminUsers) {
-        user.password = adminHash;
-        user.activo = 1;
-        await user.save();
+    // Solo si NO existe ningún usuario en la tabla usuarios, crea un admin inicial con ADMIN_INITIAL_PASSWORD
+    const totalUsuarios = await models.Usuario.count();
+    if (totalUsuarios === 0) {
+      const initialPassword = process.env.ADMIN_INITIAL_PASSWORD || 'admin123';
+      if (initialPassword && initialPassword.trim()) {
+        const adminHash = await bcrypt.hash(initialPassword.trim(), 10);
+        await models.Usuario.create({
+          nombre: 'Administrador',
+          correo: 'admin@admin.com',
+          rol: 'admin',
+          password: adminHash,
+          activo: 1,
+          almacenId: almacenPrincipal.id
+        });
+        console.log('[AI Studio] Usuario admin inicial creado desde ADMIN_INITIAL_PASSWORD.');
+      } else {
+        console.log('[AI Studio] No existen usuarios y no se especificó ADMIN_INITIAL_PASSWORD. No se creó usuario.');
       }
-      console.log('[AI Studio] Usuarios admin actualizados con contraseña Salome2016.');
     }
 
-    const productoCount = await models.Producto.count();
-    if (productoCount === 0) {
-      const prod = await models.Producto.create({
-        nombre: 'Inyector Bosch High Performance',
-        descripcion: 'Inyector de alta presión para motor diésel/gasolina',
-        categoria: 'Inyectores',
-        marca: 'Bosch',
-        modelo: '0445110001',
-        compatibilidad: 'Universal / Renault / Chevrolet',
-        codigo_oem: 'BOSCH-0445',
-        stock: 25,
-        stock_minimo: 5,
-        precio: 350000,
-        precio_detal: 380000,
-        precio_mayor: 320000,
-        precio_almacen: 300000,
-        costo: 220000,
-        activo: true
-      });
-      await models.ProductoAlmacen.create({
-        productoId: prod.id,
-        almacenId: almacenPrincipal.id,
-        stock: 25,
-        stock_minimo: 5
-      });
-    }
+    // Los datos de ejemplo (empresa, productos de prueba) solo deben crearse si NODE_ENV !== 'production'
+    if (process.env.NODE_ENV !== 'production') {
+      const empresaCount = await models.Empresa.count();
+      if (empresaCount === 0) {
+        await models.Empresa.create({
+          nombre: 'Multinyectores Colombia',
+          nit: '900123456-1',
+          telefono: '+57 300 123 4567',
+          direccion: 'Calle Principal #12-34',
+          correo: 'contacto@multinyectorescolombia.com'
+        });
+      }
 
-    const clienteCount = await models.Cliente.count();
-    if (clienteCount === 0) {
-      await models.Cliente.create({
-        nombre: 'Cliente General',
-        tipo_cliente: 'Detal',
-        documento: '222222222',
-        tipo_documento: 'CC',
-        telefono: '3000000000',
-        correo: 'cliente@ejemplo.com',
-        direccion: 'Carrera 10 #20-30',
-        ciudad: 'Bogotá',
-        pais: 'Colombia'
-      });
+      const productoCount = await models.Producto.count();
+      if (productoCount === 0) {
+        const prod = await models.Producto.create({
+          nombre: 'Inyector Bosch High Performance',
+          descripcion: 'Inyector de alta presión para motor diésel/gasolina',
+          categoria: 'Inyectores',
+          marca: 'Bosch',
+          modelo: '0445110001',
+          compatibilidad: 'Universal / Renault / Chevrolet',
+          codigo_oem: 'BOSCH-0445',
+          stock: 25,
+          stock_minimo: 5,
+          precio: 350000,
+          precio_detal: 380000,
+          precio_mayor: 320000,
+          precio_almacen: 300000,
+          costo: 220000,
+          activo: true
+        });
+        await models.ProductoAlmacen.create({
+          productoId: prod.id,
+          almacenId: almacenPrincipal.id,
+          stock: 25,
+          stock_minimo: 5
+        });
+      }
+
+      const clienteCount = await models.Cliente.count();
+      if (clienteCount === 0) {
+        await models.Cliente.create({
+          nombre: 'Cliente General',
+          tipo_cliente: 'Detal',
+          documento: '222222222',
+          tipo_documento: 'CC',
+          telefono: '3000000000',
+          correo: 'cliente@ejemplo.com',
+          direccion: 'Carrera 10 #20-30',
+          ciudad: 'Bogotá',
+          pais: 'Colombia'
+        });
+      }
     }
   } catch (err) {
     console.error('[AI Studio] Error inicializando datos base:', err && err.message ? err.message : err);

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { parsePrecio, formatCurrency, formatNumber } from './utils/formatters';
+import { parsePrecio, formatCurrency, formatNumber, hoyColombia } from './utils/formatters';
 import { toast } from 'react-toastify';
 import FieldError from './components/FieldError';
 
@@ -10,13 +10,16 @@ import {
   MdPrint, MdStore, MdAttachMoney, MdShowChart, MdDateRange, MdMoreVert,
   MdClose, MdInfo, MdLocalShipping, MdCreditCard, MdAccountBalanceWallet
 } from 'react-icons/md';
-import { FaFileExcel, FaFilePdf, FaPlus, FaShoppingBag, FaUserCheck, FaWarehouse, FaFileInvoiceDollar } from 'react-icons/fa';
+import { FaFileExcel, FaFilePdf, FaPlus, FaShoppingBag, FaUserCheck, FaWarehouse, FaFileInvoiceDollar, FaWhatsapp } from 'react-icons/fa';
 
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { createDoc, tableToPdf, savePdf } from './utils/pdfUtils';
+import WhatsAppModal from './components/WhatsAppModal';
+import { buildWhatsAppDocumentMessage } from './utils/whatsapp';
+import { puede } from './config/permisos';
 
-function Ventas({ usuario }) {
+function Ventas({ usuario, onNavigate }) {
   // Main Data States
   const [ventas, setVentas] = useState([]);
   const [productos, setProductos] = useState([]);
@@ -41,14 +44,15 @@ function Ventas({ usuario }) {
     productoId: '',
     productoNombre: '',
     cantidad: 1,
+    precioServicio: '',
     descuento: 0,
     impuestos: 0,
     metodoPago: 'Efectivo',
     almacenId: usuario?.almacenId || 1,
     notas: '',
     vendedor: usuario?.nombre || '',
-    estado: 'Pagada',
-    fecha: new Date().toISOString().slice(0, 10)
+    estado: 'Pendiente',
+    fecha: hoyColombia()
   });
   const [carrito, setCarrito] = useState([]);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -60,13 +64,17 @@ function Ventas({ usuario }) {
   const [comprobanteData, setComprobanteData] = useState(null);
   const [loadingComprobante, setLoadingComprobante] = useState(false);
 
+  // Modal WhatsApp Directo
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsAppData, setWhatsAppData] = useState(null);
+
   // Modal Anulación Venta
   const [showAnularModal, setShowAnularModal] = useState(false);
   const [ventaAAnular, setVentaAAnular] = useState(null);
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
   const [anulando, setAnulando] = useState(false);
 
-  const isAdmin = usuario?.rol === 'admin';
+  const isAdmin = puede(usuario, 'almacenes.gestionar');
   const tokenHeader = useMemo(() => `Bearer ${usuario?.token || localStorage.getItem('token') || ''}`, [usuario?.token]);
 
   // Fetch Ventas con Filtros
@@ -134,15 +142,35 @@ function Ventas({ usuario }) {
     return clientes.find(c => String(c.id) === String(form.clienteId));
   }, [clientes, form.clienteId]);
 
-  // Selección de Producto para agregar al carrito
+  // Producto o servicio actualmente enfocado/seleccionado en el buscador
+  const productoSeleccionado = useMemo(() => {
+    if (!form.productoNombre && !form.productoId) return null;
+    let found = productos.find(p => String(p.id) === String(form.productoId));
+    if (!found && form.productoNombre) {
+      const searchVal = form.productoNombre.trim().toLowerCase();
+      found = productos.find(p => 
+        p.nombre.toLowerCase() === searchVal || 
+        (p.codigo_oem && p.codigo_oem.toLowerCase() === searchVal)
+      );
+    }
+    return found;
+  }, [productos, form.productoId, form.productoNombre]);
+
+  const esServicioSeleccionado = useMemo(() => {
+    if (!productoSeleccionado) return false;
+    return productoSeleccionado.tipo === 'servicio' || 
+      (productoSeleccionado.categoria && productoSeleccionado.categoria.toLowerCase().includes('servicio'));
+  }, [productoSeleccionado]);
+
+  // Selección de Producto o Servicio para agregar al carrito
   const handleAgregarProducto = () => {
     setModalError('');
     const errs = {};
 
     if (!form.productoNombre || !form.productoNombre.trim()) {
-      errs.producto = 'Escriba o seleccione un producto';
+      errs.producto = 'Escriba o seleccione un producto o servicio';
       setFieldErrors(errs);
-      setModalError('❌ Debe seleccionar o escribir el nombre de un producto.');
+      setModalError('❌ Debe seleccionar o escribir el nombre de un producto o servicio.');
       return;
     }
 
@@ -153,8 +181,8 @@ function Ventas({ usuario }) {
       return;
     }
 
-    // Buscar producto en catálogo
-    let prod = productos.find(p => String(p.id) === String(form.productoId));
+    // Buscar producto o servicio en catálogo
+    let prod = productoSeleccionado;
     if (!prod) {
       const searchVal = form.productoNombre.trim().toLowerCase();
       prod = productos.find(p => 
@@ -165,12 +193,24 @@ function Ventas({ usuario }) {
     }
 
     if (!prod) {
-      setFieldErrors({ producto: 'Producto no encontrado' });
-      setModalError(`❌ No se encontró el producto "${form.productoNombre}". Selecciónelo de la lista emergente.`);
+      setFieldErrors({ producto: 'Ítem no encontrado' });
+      setModalError(`❌ No se encontró el ítem "${form.productoNombre}". Selecciónelo de la lista emergente.`);
       return;
     }
 
-    // Verificar stock según almacén
+    const isServicio = prod.tipo === 'servicio' || (prod.categoria && prod.categoria.toLowerCase().includes('servicio'));
+
+    // Si es un SERVICIO: Es obligatorio colocar el valor del trabajo
+    if (isServicio) {
+      const valorNum = Number(form.precioServicio);
+      if (!form.precioServicio || isNaN(valorNum) || valorNum <= 0) {
+        setFieldErrors({ precioServicio: 'Debe colocar el valor del servicio' });
+        setModalError(`❌ El ítem "${prod.nombre}" es un SERVICIO. Ingrese el valor a cobrar por este trabajo (ej: mantenimiento o calibración).`);
+        return;
+      }
+    }
+
+    // Verificar stock según almacén solo si es un repuesto físico
     const almacenAct = form.almacenId || 1;
     let stockBodega = prod.stock || 0;
     if (Array.isArray(prod.almacenes)) {
@@ -184,8 +224,6 @@ function Ventas({ usuario }) {
     const cantExistente = enCarrito ? Number(enCarrito.cantidad) : 0;
     const cantSolicitada = cantExistente + Number(form.cantidad);
 
-    const isServicio = prod.tipo === 'servicio' || (prod.categoria && prod.categoria.toLowerCase().includes('servicio'));
-
     if (!isServicio) {
       if (stockBodega <= 0) {
         setModalError(`❌ No se puede agregar "${prod.nombre}". No hay stock disponible en esta bodega (Stock actual: 0).`);
@@ -197,55 +235,80 @@ function Ventas({ usuario }) {
       }
     }
 
-    // Seleccionar precio según cliente
-    let precioBase = prod.precio_detal || prod.precio || 0;
-    if (clienteSeleccionado) {
-      if (clienteSeleccionado.tipo_cliente === 'Mayor' && prod.precio_mayor) precioBase = prod.precio_mayor;
-      else if (clienteSeleccionado.tipo_cliente === 'Almacén' && prod.precio_almacen) precioBase = prod.precio_almacen;
-      else if (clienteSeleccionado.tipo_cliente === 'Detal' && prod.precio_detal) precioBase = prod.precio_detal;
+    // Determinar precio final: Si es servicio se usa el valor ingresado; si es repuesto físico se toma de lista
+    let precioFinal = 0;
+    if (isServicio) {
+      precioFinal = Number(form.precioServicio);
+    } else {
+      let precioBase = prod.precio_detal || prod.precio || 0;
+      if (clienteSeleccionado) {
+        if (clienteSeleccionado.tipo_cliente === 'Mayor' && prod.precio_mayor) precioBase = prod.precio_mayor;
+        else if (clienteSeleccionado.tipo_cliente === 'Almacén' && prod.precio_almacen) precioBase = prod.precio_almacen;
+        else if (clienteSeleccionado.tipo_cliente === 'Detal' && prod.precio_detal) precioBase = prod.precio_detal;
+      }
+      precioFinal = parsePrecio(precioBase) || Number(precioBase) || 0;
     }
 
     setCarrito(prev => {
-      const idx = prev.findIndex(item => item.productoId === prod.id && Number(item.almacenId) === Number(almacenAct));
+      // Para repuestos físicos agrupamos por productoId y almacén.
+      // Para servicios agrupamos si tienen el mismo valor unitario.
+      const idx = prev.findIndex(item => 
+        item.productoId === prod.id && 
+        Number(item.almacenId) === Number(almacenAct) &&
+        (!isServicio || item.precio === precioFinal)
+      );
+
       if (idx >= 0) {
         const copy = [...prev];
         copy[idx].cantidad += Number(form.cantidad);
         return copy;
       }
+
       return [
         ...prev,
         {
           productoId: prod.id,
           nombre: prod.nombre,
           codigo_oem: prod.codigo_oem,
-          precio: parsePrecio(precioBase) || Number(precioBase) || 0,
+          precio: precioFinal,
           cantidad: Number(form.cantidad),
           almacenId: almacenAct,
-          stockDisponible: stockBodega
+          stockDisponible: stockBodega,
+          isServicio: isServicio
         }
       ];
     });
 
-    setForm(f => ({ ...f, productoId: '', productoNombre: '', cantidad: 1 }));
+    setForm(f => ({ ...f, productoId: '', productoNombre: '', cantidad: 1, precioServicio: '' }));
     setFieldErrors({});
     setModalError('');
   };
 
-  const handleQuitarProducto = (productoId, almacenId) => {
-    setCarrito(prev => prev.filter(p => !(p.productoId === productoId && p.almacenId === almacenId)));
+  const handleQuitarProducto = (index) => {
+    setCarrito(prev => prev.filter((_, idx) => idx !== index));
   };
 
-  const handleCambiarCantidad = (productoId, almacenId, nuevaCant) => {
+  const handleCambiarCantidad = (index, nuevaCant) => {
     const num = Math.max(1, Number(nuevaCant) || 1);
-    setCarrito(prev => prev.map(p => {
-      if (p.productoId === productoId && p.almacenId === almacenId) {
-        if (num > p.stockDisponible) {
-          setModalError(`❌ No hay suficiente stock para "${p.nombre}". Stock disponible: ${p.stockDisponible}`);
-          return { ...p, cantidad: p.stockDisponible };
+    setCarrito(prev => prev.map((item, idx) => {
+      if (idx === index) {
+        if (!item.isServicio && num > item.stockDisponible) {
+          setModalError(`❌ No hay suficiente stock para "${item.nombre}". Stock disponible: ${item.stockDisponible}`);
+          return { ...item, cantidad: item.stockDisponible };
         }
-        return { ...p, cantidad: num };
+        return { ...item, cantidad: num };
       }
-      return p;
+      return item;
+    }));
+  };
+
+  const handleCambiarPrecio = (index, nuevoPrecio) => {
+    const val = Math.max(0, Number(nuevoPrecio) || 0);
+    setCarrito(prev => prev.map((item, idx) => {
+      if (idx === index) {
+        return { ...item, precio: val };
+      }
+      return item;
     }));
   };
 
@@ -303,7 +366,10 @@ function Ventas({ usuario }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al procesar la venta');
 
-      toast.success('Venta registrada con éxito');
+      const msg = form.estado === 'Pendiente'
+        ? '¡Venta registrada como PENDIENTE! Lista en el módulo Facturación para validar y certificar ingreso de dinero.'
+        : '¡Venta registrada con éxito!';
+      toast.success(msg, { autoClose: 4000 });
       setShowNuevaVentaModal(false);
       setCarrito([]);
       setForm(f => ({
@@ -315,6 +381,7 @@ function Ventas({ usuario }) {
         cantidad: 1,
         descuento: 0,
         impuestos: 0,
+        estado: 'Pendiente',
         notas: ''
       }));
 
@@ -325,6 +392,7 @@ function Ventas({ usuario }) {
         handleVerComprobante(data.venta.id);
       }
     } catch (err) {
+      setModalError(err.message);
       toast.error(err.message);
     } finally {
       setSavingVenta(false);
@@ -379,6 +447,10 @@ function Ventas({ usuario }) {
   // Confirmar Anulación
   const handleConfirmarAnulacion = async () => {
     if (!ventaAAnular) return;
+    if (!motivoAnulacion || !motivoAnulacion.trim()) {
+      toast.warning('El motivo de anulación es obligatorio');
+      return;
+    }
     setAnulando(true);
     try {
       const res = await fetch(`/ventas/${ventaAAnular.id}/anular`, {
@@ -387,7 +459,7 @@ function Ventas({ usuario }) {
           'Content-Type': 'application/json',
           'Authorization': tokenHeader
         },
-        body: JSON.stringify({ motivoAnulacion })
+        body: JSON.stringify({ motivoAnulacion: motivoAnulacion.trim() })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al anular la venta');
@@ -426,13 +498,80 @@ function Ventas({ usuario }) {
     window.print();
   };
 
+  // Abrir Modal de Envío por WhatsApp
+  const handleAbrirWhatsAppVenta = async (v, empData) => {
+    if (!v) return;
+    let ventaFull = v;
+    let emp = empData;
+
+    // Si no tiene los detalles cargados, consultar endpoint de comprobante
+    if (!ventaFull.DetalleVentas || ventaFull.DetalleVentas.length === 0) {
+      try {
+        const res = await fetch(`/ventas/${v.id}/comprobante`, {
+          headers: { 'Authorization': tokenHeader }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.venta) ventaFull = data.venta;
+          if (data.empresa && !emp) emp = data.empresa;
+        }
+      } catch (e) {
+        console.warn('Error al cargar datos completos para WhatsApp:', e);
+      }
+    }
+
+    const isCotiz = ventaFull.es_cotizacion || ventaFull.estado === 'Cotizacion' || (ventaFull.notas && ventaFull.notas.toLowerCase().includes('cotiz'));
+    const tipoDoc = isCotiz ? 'Cotización' : 'Comprobante de Venta';
+    const numero = isCotiz ? `COT-${ventaFull.id}` : `VEN-${ventaFull.id}`;
+    const clienteNombre = ventaFull.Cliente?.nombre || ventaFull.cliente || 'Cliente General';
+    const clienteTel = ventaFull.Cliente?.telefono || ventaFull.Cliente?.celular || ventaFull.telefono || '';
+    const tokenVenta = ventaFull.token_publico || ventaFull.id;
+    const publicUrl = `${window.location.origin}/ventas/public/${tokenVenta}`;
+    const empFinal = emp || { nombre: 'Multinyectores Colombia', direccion: 'Tuluá - Valle del Cauca', telefono: '(602) 224-5000' };
+
+    const mensaje = buildWhatsAppDocumentMessage({
+      tipoDoc,
+      numero,
+      cliente: clienteNombre,
+      fecha: ventaFull.fecha,
+      total: ventaFull.total,
+      metodoPago: ventaFull.metodoPago || 'Efectivo',
+      estado: ventaFull.estado || 'Completada',
+      items,
+      empresa: empFinal,
+      notas: ventaFull.notas,
+      publicUrl
+    });
+
+    setWhatsAppData({
+      tipoDoc,
+      numero,
+      cliente: clienteNombre,
+      documento: ventaFull.Cliente?.documento || ventaFull.documento || '',
+      direccion: ventaFull.direccion || ventaFull.Cliente?.direccion || '',
+      telefono: clienteTel,
+      bodega: ventaFull.almacen?.nombre || 'Sede Principal',
+      metodoPago: ventaFull.metodoPago || 'Efectivo',
+      fecha: ventaFull.fecha,
+      items,
+      total: ventaFull.total,
+      descuento: ventaFull.descuento || 0,
+      impuestos: ventaFull.impuestos || 0,
+      notas: ventaFull.notas,
+      empresa: empFinal,
+      publicUrl,
+      mensaje
+    });
+    setShowWhatsAppModal(true);
+  };
+
   // Exportar Excel
   const exportExcel = () => {
     const data = ventas.map(v => {
       const detalles = v.DetalleVentas || v.DetalleVenta || [];
       return {
         'No. Venta': `VEN-${v.id}`,
-        'Fecha': v.fecha ? new Date(v.fecha).toLocaleString() : '',
+        'Fecha': v.fecha ? new Date(v.fecha).toLocaleString('es-CO', { timeZone: 'America/Bogota' }) : '',
         'Cliente': v.Cliente?.nombre || v.clienteId,
         'Documento': v.Cliente?.documento || '',
         'Almacén': v.almacen?.nombre || 'Sede Principal',
@@ -449,7 +588,7 @@ function Ventas({ usuario }) {
     XLSX.utils.book_append_sheet(wb, ws, 'Historial_Ventas');
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
-    saveAs(blob, `Reporte_Ventas_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    saveAs(blob, `Reporte_Ventas_${hoyColombia()}.xlsx`);
   };
 
   // Exportar PDF
@@ -469,7 +608,7 @@ function Ventas({ usuario }) {
         formatCurrency(v.total || 0)
       ])
     });
-    savePdf(doc, `Ventas_${new Date().toISOString().slice(0, 10)}.pdf`);
+    savePdf(doc, `Ventas_${hoyColombia()}.pdf`);
   };
 
   // Cálculos estadísticos (KPIs)
@@ -692,7 +831,7 @@ function Ventas({ usuario }) {
                       </td>
 
                       <td style={{ padding: '12px', color: '#4a5568' }}>
-                        {v.fecha ? new Date(v.fecha).toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                        {v.fecha ? new Date(v.fecha).toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }) : '-'}
                       </td>
 
                       <td style={{ padding: '12px' }}>
@@ -728,6 +867,11 @@ function Ventas({ usuario }) {
                             <MdCheckCircle size={13} style={{ marginRight: '3px' }} /> Pagada
                           </span>
                         )}
+                        {v.estado === 'En Cartera' && (
+                          <span style={{ background: '#f3e8ff', color: '#6b21a8', border: '1px solid #c084fc', padding: '4px 8px', borderRadius: '12px', fontWeight: 700, fontSize: '11px' }}>
+                            📑 En Cartera
+                          </span>
+                        )}
                         {v.estado === 'Pendiente' && (
                           <span style={{ background: '#feebc8', color: '#744210', padding: '4px 8px', borderRadius: '12px', fontWeight: 600, fontSize: '11px' }}>
                             Pendiente
@@ -756,6 +900,15 @@ function Ventas({ usuario }) {
                             <MdReceipt size={16} />
                           </button>
 
+                          <button 
+                            className="btn" 
+                            style={{ padding: '6px', background: '#f0fff4', color: '#25D366', border: '1px solid #bbf7d0' }}
+                            onClick={() => handleAbrirWhatsAppVenta(v)} 
+                            title="Enviar orden o cotización por WhatsApp al cliente"
+                          >
+                            <FaWhatsapp size={16} />
+                          </button>
+
                           {(v.es_cotizacion || isPendiente) && (
                             <button 
                               className="btn" 
@@ -778,7 +931,7 @@ function Ventas({ usuario }) {
                             </button>
                           )}
 
-                          {isAdmin && !isAnulada && (
+                          {puede(usuario, 'ventas.anular') && !isAnulada && (
                             <button 
                               className="btn" 
                               style={{ padding: '6px', background: '#fff5f5', color: '#e53e3e', border: '1px solid #fed7d7' }}
@@ -828,10 +981,33 @@ function Ventas({ usuario }) {
                   fontSize: '14px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px'
+                  gap: '10px',
+                  flexWrap: 'wrap'
                 }}>
                   <span style={{ fontSize: '18px' }}>⚠️</span>
                   <span style={{ flex: 1 }}>{modalError}</span>
+                  {modalError.toLowerCase().includes('caja') && onNavigate && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNuevaVentaModal(false);
+                        onNavigate('caja');
+                      }}
+                      className="btn"
+                      style={{
+                        backgroundColor: '#3182ce',
+                        color: '#ffffff',
+                        padding: '6px 14px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Ir a Arqueo de Caja ➔
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setModalError('')}
@@ -912,8 +1088,8 @@ function Ventas({ usuario }) {
                         className="input" 
                         style={{ width: '100%', fontSize: '13px' }}
                       >
-                        <option value="Pagada">Pagada (Venta Directa)</option>
-                        <option value="Pendiente">Pendiente (Por cobrar)</option>
+                        <option value="Pendiente">⏳ Pendiente (Por cobrar y facturar en caja)</option>
+                        <option value="Pagada">Pagada (Venta Directa de Contado)</option>
                         <option value="Cotizacion">Cotización / Presupuesto</option>
                       </select>
                     </div>
@@ -934,23 +1110,59 @@ function Ventas({ usuario }) {
 
               </div>
 
-              {/* SECCIÓN AGREGAR PRODUCTOS */}
+              {/* SECCIÓN AGREGAR PRODUCTOS O SERVICIOS */}
               <div style={{ background: '#edf2f7', padding: '14px', borderRadius: '8px', marginBottom: '16px' }}>
-                <div style={{ fontWeight: 600, marginBottom: '8px', color: '#2d3748' }}>Buscador y Selección de Productos</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ fontWeight: 600, color: '#2d3748' }}>Buscador y Selección de Repuestos / Servicios</div>
+                  {esServicioSeleccionado && (
+                    <span style={{ background: '#ebf8ff', color: '#2b6cb0', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, border: '1px solid #bee3f8' }}>
+                      🛠️ SERVICIO DETECTADO (PRECIO VARIABLE)
+                    </span>
+                  )}
+                </div>
+
+                {esServicioSeleccionado && (
+                  <div style={{
+                    background: '#ebf8ff',
+                    border: '1px solid #bee3f8',
+                    borderLeft: '4px solid #3182ce',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    marginBottom: '10px',
+                    fontSize: '12px',
+                    color: '#2b6cb0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span style={{ fontSize: '16px' }}>💡</span>
+                    <span>
+                      <b>Servicio: "{productoSeleccionado?.nombre}"</b>. El costo de mano de obra, mantenimiento o diagnóstico varía según el trabajo. <b>Por favor ingrese a continuación el valor exacto a cobrar.</b>
+                    </span>
+                  </div>
+                )}
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 100px', gap: '10px', alignItems: 'flex-end' }}>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: esServicioSeleccionado ? '2fr 80px 140px 100px' : '2fr 100px 100px', 
+                  gap: '10px', 
+                  alignItems: 'flex-end' 
+                }}>
                   
                   <div>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: '#4a5568', display: 'block', marginBottom: '2px' }}>
+                      Repuesto o Servicio *
+                    </label>
                     <input 
                       type="text" 
-                      placeholder="Escriba el nombre o código OEM del producto..." 
+                      placeholder="Escriba el nombre del repuesto o servicio (ej: Mantenimiento inyector)..." 
                       value={form.productoNombre} 
                       onChange={e => {
                         const val = e.target.value;
                         setForm(f => ({ ...f, productoNombre: val }));
                         setModalError('');
                         if (!val) {
-                          setForm(f => ({ ...f, productoId: '' }));
+                          setForm(f => ({ ...f, productoId: '', precioServicio: '' }));
                           return;
                         }
                         const searchVal = val.trim().toLowerCase();
@@ -959,8 +1171,12 @@ function Ventas({ usuario }) {
                           (p.codigo_oem && p.codigo_oem.toLowerCase() === searchVal)
                         );
                         if (match) {
-                          setForm(f => ({ ...f, productoId: String(match.id) }));
                           const isServ = match.tipo === 'servicio' || (match.categoria && match.categoria.toLowerCase().includes('servicio'));
+                          setForm(f => ({ 
+                            ...f, 
+                            productoId: String(match.id),
+                            precioServicio: isServ ? (f.precioServicio || (match.precio > 0 ? String(match.precio) : '')) : ''
+                          }));
                           const almacenAct = form.almacenId || 1;
                           let stockBodega = match.stock || 0;
                           if (Array.isArray(match.almacenes)) {
@@ -985,7 +1201,7 @@ function Ventas({ usuario }) {
                           <option 
                             key={p.id} 
                             value={p.nombre} 
-                            label={isServ ? `🛠️ SERVICIO | Precio: ${formatCurrency(p.precio_detal || p.precio)}` : `📦 REPUESTO | OEM: ${p.codigo_oem || '-'} | Stock: ${p.stock}`}
+                            label={isServ ? `🛠️ SERVICIO | Valor a definir` : `📦 REPUESTO | OEM: ${p.codigo_oem || '-'} | Stock: ${p.stock}`}
                           />
                         );
                       })}
@@ -994,22 +1210,46 @@ function Ventas({ usuario }) {
                   </div>
 
                   <div>
+                    <label style={{ fontSize: '11px', fontWeight: 600, color: '#4a5568', display: 'block', marginBottom: '2px' }}>
+                      Cantidad
+                    </label>
                     <input 
                       type="number" 
                       min="1" 
                       value={form.cantidad} 
                       onChange={e => setForm({ ...form, cantidad: e.target.value })} 
                       className="input" 
-                      placeholder="Cantidad" 
+                      placeholder="Cant" 
                       style={{ width: '100%' }}
                     />
                   </div>
+
+                  {/* CAMPO DE PRECIO OBLIGATORIO SOLO PARA SERVICIOS */}
+                  {esServicioSeleccionado && (
+                    <div>
+                      <label style={{ fontSize: '11px', fontWeight: 700, color: '#2b6cb0', display: 'block', marginBottom: '2px' }}>
+                        Valor Servicio ($) *
+                      </label>
+                      <input 
+                        type="number" 
+                        step="500" 
+                        placeholder="Ej: 80000" 
+                        value={form.precioServicio} 
+                        onChange={e => setForm({ ...form, precioServicio: e.target.value })} 
+                        className="input" 
+                        style={{ width: '100%', borderColor: '#3182ce', fontWeight: 700, background: '#ffffff', color: '#2b6cb0' }}
+                        autoFocus
+                        required
+                      />
+                      {fieldErrors.precioServicio && <FieldError>{fieldErrors.precioServicio}</FieldError>}
+                    </div>
+                  )}
 
                   <button 
                     type="button" 
                     onClick={handleAgregarProducto} 
                     className="btn btn-principal" 
-                    style={{ backgroundColor: '#38a169', width: '100%' }}
+                    style={{ backgroundColor: '#38a169', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
                   >
                     <FaPlus /> Agregar
                   </button>
@@ -1022,10 +1262,10 @@ function Ventas({ usuario }) {
                 <table className="usuarios-table" style={{ width: '100%', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ background: '#e2e8f0' }}>
-                      <th style={{ padding: '8px' }}>Producto</th>
-                      <th style={{ padding: '8px' }}>OEM</th>
+                      <th style={{ padding: '8px' }}>Producto / Servicio</th>
+                      <th style={{ padding: '8px' }}>Tipo / OEM</th>
                       <th style={{ padding: '8px', textAlign: 'center' }}>Cantidad</th>
-                      <th style={{ padding: '8px', textAlign: 'right' }}>Precio Unit.</th>
+                      <th style={{ padding: '8px', textAlign: 'right' }}>Valor Unit.</th>
                       <th style={{ padding: '8px', textAlign: 'right' }}>Subtotal</th>
                       <th style={{ padding: '8px', textAlign: 'center' }}>Acción</th>
                     </tr>
@@ -1034,33 +1274,62 @@ function Ventas({ usuario }) {
                     {carrito.length === 0 ? (
                       <tr>
                         <td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: '#a0aec0' }}>
-                          No hay productos agregados al carrito de venta.
+                          No hay productos o servicios agregados al carrito de venta.
                         </td>
                       </tr>
                     ) : (
-                      carrito.map(item => (
-                        <tr key={`${item.productoId}-${item.almacenId}`}>
-                          <td style={{ padding: '8px', fontWeight: 600 }}>{item.nombre}</td>
-                          <td style={{ padding: '8px', color: '#718096' }}>{item.codigo_oem || '-'}</td>
+                      carrito.map((item, idx) => (
+                        <tr key={`${item.productoId}-${item.almacenId}-${idx}`}>
+                          <td style={{ padding: '8px', fontWeight: 600 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>{item.nombre}</span>
+                              {item.isServicio && (
+                                <span style={{ background: '#ebf8ff', color: '#2b6cb0', padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, border: '1px solid #bee3f8' }}>
+                                  🛠️ SERVICIO
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '8px', color: '#718096' }}>
+                            {item.isServicio ? 'Mano de Obra / Servicio' : (item.codigo_oem || '-')}
+                          </td>
                           <td style={{ padding: '8px', textAlign: 'center' }}>
                             <input 
                               type="number" 
                               min="1" 
                               value={item.cantidad} 
-                              onChange={e => handleCambiarCantidad(item.productoId, item.almacenId, e.target.value)} 
+                              onChange={e => handleCambiarCantidad(idx, e.target.value)} 
                               style={{ width: '60px', padding: '2px 4px', textAlign: 'center' }}
                             />
                           </td>
-                          <td style={{ padding: '8px', textAlign: 'right' }}>{formatCurrency(item.precio)}</td>
+                          <td style={{ padding: '8px', textAlign: 'right' }}>
+                            {item.isServicio ? (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                                <span style={{ fontSize: '11px', color: '#718096' }}>$</span>
+                                <input 
+                                  type="number" 
+                                  step="500" 
+                                  value={item.precio} 
+                                  onChange={e => handleCambiarPrecio(idx, e.target.value)} 
+                                  className="input" 
+                                  style={{ width: '105px', padding: '3px 6px', textAlign: 'right', fontWeight: 700, color: '#2b6cb0', borderColor: '#90cdf4', background: '#ebf8ff' }}
+                                  title="Haga clic para ajustar el valor de este servicio"
+                                />
+                              </div>
+                            ) : (
+                              formatCurrency(item.precio)
+                            )}
+                          </td>
                           <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700, color: '#276749' }}>
                             {formatCurrency(item.precio * item.cantidad)}
                           </td>
                           <td style={{ padding: '8px', textAlign: 'center' }}>
                             <button 
                               type="button" 
-                              onClick={() => handleQuitarProducto(item.productoId, item.almacenId)} 
+                              onClick={() => handleQuitarProducto(idx)} 
                               className="btn" 
                               style={{ color: '#e53e3e', background: '#fff5f5', padding: '2px 6px' }}
+                              title="Quitar ítem del carrito"
                             >
                               <MdRemoveShoppingCart size={16} />
                             </button>
@@ -1192,13 +1461,22 @@ function Ventas({ usuario }) {
                 </div>
 
                 {/* INFO VENTA Y CLIENTE */}
+                {(comprobanteData.venta.estado === 'Anulada' || comprobanteData.venta.fechaAnulacion || comprobanteData.venta.motivoAnulacion) && (
+                  <div style={{ background: '#fee2e2', border: '1px solid #f87171', borderRadius: '4px', padding: '8px', marginBottom: '10px', color: '#991b1b', fontSize: '11px' }}>
+                    <div style={{ fontWeight: 800, fontSize: '12px', marginBottom: '3px' }}>⚠️ VENTA ANULADA</div>
+                    {comprobanteData.venta.anuladaPor && <div><b>Anulada por:</b> {comprobanteData.venta.anuladaPor}</div>}
+                    {comprobanteData.venta.fechaAnulacion && <div><b>Fecha de anulación:</b> {new Date(comprobanteData.venta.fechaAnulacion).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}</div>}
+                    {comprobanteData.venta.motivoAnulacion && <div><b>Motivo:</b> {comprobanteData.venta.motivoAnulacion}</div>}
+                  </div>
+                )}
                 <div style={{ marginBottom: '10px' }}>
-                  <div><b>Fecha:</b> {new Date(comprobanteData.venta.fecha).toLocaleString()}</div>
+                  <div><b>Fecha:</b> {new Date(comprobanteData.venta.fecha).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}</div>
                   <div><b>Cliente:</b> {comprobanteData.venta.Cliente?.nombre || 'Cliente General'}</div>
                   <div><b>Doc/NIT:</b> {comprobanteData.venta.Cliente?.documento || 'Venta Mostrador'}</div>
                   <div><b>Atendido por:</b> {comprobanteData.venta.vendedor || 'Sistema'}</div>
                   <div><b>Bodega:</b> {comprobanteData.venta.almacen?.nombre || 'Sede Principal'}</div>
                   <div><b>Método Pago:</b> {comprobanteData.venta.metodoPago || 'Efectivo'}</div>
+                  <div><b>Estado:</b> {comprobanteData.venta.estado === 'En Cartera' ? 'En Cartera (Crédito)' : (comprobanteData.venta.estado || 'Pagada')}</div>
                 </div>
 
                 {/* DETALLE ARTICULOS */}
@@ -1254,9 +1532,28 @@ function Ventas({ usuario }) {
               </div>
             ) : null}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
-              <button onClick={handleImprimirTicket} className="btn btn-principal" style={{ backgroundColor: '#2b6cb0' }}>
-                <MdPrint /> Imprimir Ticket
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+              <button 
+                type="button"
+                onClick={() => handleAbrirWhatsAppVenta(comprobanteData.venta, comprobanteData.empresa)} 
+                className="btn" 
+                style={{ 
+                  backgroundColor: '#25D366', 
+                  color: '#ffffff', 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '6px',
+                  fontWeight: 600,
+                  border: 'none',
+                  boxShadow: '0 2px 4px rgba(37, 211, 102, 0.3)'
+                }}
+                title="Enviar comprobante de venta o cotización por WhatsApp"
+              >
+                <FaWhatsapp size={18} /> Enviar por WhatsApp
+              </button>
+
+              <button onClick={handleImprimirTicket} className="btn btn-principal" style={{ backgroundColor: '#2b6cb0', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <MdPrint size={18} /> Imprimir Ticket
               </button>
             </div>
 
@@ -1309,6 +1606,13 @@ function Ventas({ usuario }) {
           </div>
         </div>
       )}
+
+      {/* MODAL WHATSAPP */}
+      <WhatsAppModal 
+        isOpen={showWhatsAppModal} 
+        onClose={() => setShowWhatsAppModal(false)} 
+        data={whatsAppData} 
+      />
 
     </div>
   );

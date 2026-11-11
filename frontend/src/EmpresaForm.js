@@ -614,7 +614,7 @@ function EmpresaForm() {
                 </div>
 
                 <div style={{ textAlign: 'right', background: '#ebf8ff', padding: '8px 10px', borderRadius: '4px', border: '1px solid #bee3f8' }}>
-                  <div style={{ fontWeight: 800, color: '#2b6cb0', fontSize: '13px' }}>FACTURA DE VENTA</div>
+                  <div style={{ fontWeight: 800, color: '#2b6cb0', fontSize: '13px' }}>COMPROBANTE DE VENTA</div>
                   <div style={{ fontSize: '11px', color: '#2c5282' }}>Nº F-000123</div>
                   <div style={{ fontSize: '10px', color: '#4a5568', marginTop: '2px' }}>Fecha: {new Date().toLocaleDateString()}</div>
                 </div>

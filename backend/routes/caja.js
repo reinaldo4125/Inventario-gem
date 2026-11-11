@@ -1,14 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const { Caja, Venta, Factura } = require('../models');
-const { authRole } = require('../middleware/auth');
+const auth = require('../middleware/auth');
+const requirePermiso = require('../middleware/roles');
+const { almacenDelUsuario } = require('../utils/almacenScope');
 const { Op } = require('sequelize');
 
 // Obtener estado de caja actual
-router.get('/estado', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
+router.get('/estado', auth, requirePermiso('caja.operar'), async (req, res) => {
   try {
     const usuarioNombre = req.user ? (req.user.nombre || req.user.correo) : 'Usuario';
-    const almacenId = req.user?.almacenId || 1;
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && req.user.rol !== 'admin') return;
+    const almacenId = scopedAlmacenId || (req.user && req.user.almacenId) || 1;
 
     // Buscar turno de caja abierto
     const cajaAbierta = await Caja.findOne({
@@ -23,21 +27,24 @@ router.get('/estado', authRole(['admin', 'vendedor', 'admin_pos']), async (req, 
       return res.json({ abierta: false, caja: null });
     }
 
-    // Calcular ventas realizadas desde fecha_apertura
+    // Calcular ventas realizadas desde fecha_apertura (solo ventas Pagadas de ese turno)
     const fechaInicio = cajaAbierta.fecha_apertura;
 
     const ventas = await Venta.findAll({
       where: {
         almacenId,
         fecha: { [Op.gte]: fechaInicio },
-        estado: { [Op.ne]: 'Anulada' }
+        estado: 'Pagada'
       }
     });
 
+    const ventasFacturasIds = ventas.map(v => v.facturaId).filter(Boolean);
     const facturas = await Factura.findAll({
       where: {
         almacenId,
-        fecha: { [Op.gte]: fechaInicio }
+        fecha: { [Op.gte]: fechaInicio },
+        ...(ventasFacturasIds.length > 0 ? { id: { [Op.notIn]: ventasFacturasIds } } : {}),
+        estado: { [Op.ne]: 'Anulada' }
       }
     });
 
@@ -87,11 +94,16 @@ router.get('/estado', authRole(['admin', 'vendedor', 'admin_pos']), async (req, 
 });
 
 // Abrir turno de caja
-router.post('/apertura', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
+router.post('/apertura', auth, requirePermiso('caja.operar'), async (req, res) => {
   try {
     const { monto_apertura, observaciones } = req.body;
     const usuarioNombre = req.user ? (req.user.nombre || req.user.correo) : 'Usuario';
-    const almacenId = req.user?.almacenId || 1;
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && req.user.rol !== 'admin') return;
+    const almacenId = scopedAlmacenId || (req.user && req.user.almacenId) || (req.body && req.body.almacenId);
+    if (!almacenId) {
+      return res.status(400).json({ error: 'Debe especificar un almacén para abrir la caja' });
+    }
 
     // Verificar si ya hay una caja abierta
     const cajaAbierta = await Caja.findOne({
@@ -119,11 +131,13 @@ router.post('/apertura', authRole(['admin', 'vendedor', 'admin_pos']), async (re
 });
 
 // Cerrar turno de caja (Arqueo)
-router.post('/cierre', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
+router.post('/cierre', auth, requirePermiso('caja.operar'), async (req, res) => {
   try {
     const { monto_cierre, observaciones } = req.body;
     const usuarioNombre = req.user ? (req.user.nombre || req.user.correo) : 'Usuario';
-    const almacenId = req.user?.almacenId || 1;
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && req.user.rol !== 'admin') return;
+    const almacenId = scopedAlmacenId || (req.user && req.user.almacenId) || (req.body && req.body.almacenId);
 
     const cajaAbierta = await Caja.findOne({
       where: { almacenId, estado: 'Abierta' }
@@ -134,11 +148,18 @@ router.post('/cierre', authRole(['admin', 'vendedor', 'admin_pos']), async (req,
     }
 
     const fechaInicio = cajaAbierta.fecha_apertura;
+    // Solo sumar ventas en estado 'Pagada' de ese turno (excluye anuladas)
     const ventas = await Venta.findAll({
-      where: { almacenId, fecha: { [Op.gte]: fechaInicio }, estado: { [Op.ne]: 'Anulada' } }
+      where: { almacenId, fecha: { [Op.gte]: fechaInicio }, estado: 'Pagada' }
     });
+    const ventasFacturasIds = ventas.map(v => v.facturaId).filter(Boolean);
     const facturas = await Factura.findAll({
-      where: { almacenId, fecha: { [Op.gte]: fechaInicio } }
+      where: {
+        almacenId,
+        fecha: { [Op.gte]: fechaInicio },
+        ...(ventasFacturasIds.length > 0 ? { id: { [Op.notIn]: ventasFacturasIds } } : {}),
+        estado: { [Op.ne]: 'Anulada' }
+      }
     });
 
     let totalEfectivo = 0;
@@ -200,9 +221,17 @@ router.post('/cierre', authRole(['admin', 'vendedor', 'admin_pos']), async (req,
 });
 
 // Historial de cierres de caja
-router.get('/historial', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
+router.get('/historial', auth, requirePermiso('caja.historial'), async (req, res) => {
   try {
+    const whereCondition = {};
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && req.user.rol !== 'admin') return;
+    if (scopedAlmacenId) {
+      whereCondition.almacenId = scopedAlmacenId;
+    }
+
     const historial = await Caja.findAll({
+      where: whereCondition,
       order: [['fecha_apertura', 'DESC']],
       limit: 50
     });

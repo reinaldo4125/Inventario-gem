@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { Almacen, Producto, ProductoAlmacen, Usuario } = require('../models');
-const { authRole } = require('./auth');
+const auth = require('../middleware/auth');
+const requirePermiso = require('../middleware/roles');
+const { sanitizarCostos } = require('../utils/almacenScope');
 
 // Obtener todos los almacenes con estadísticas agregadas de inventario y personal
-router.get('/', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const almacenes = await Almacen.findAll({ order: [['id', 'ASC']] });
 
@@ -23,7 +25,9 @@ router.get('/', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) =
       const asignaciones = productoAlmacenes.filter(pa => String(pa.almacenId) === String(a.id));
       
       let totalStock = 0;
-      let totalValoracion = 0;
+      let valorCosto = 0;
+      let valorVenta = 0;
+      let productosSinCosto = 0;
       let totalReferencias = 0;
 
       asignaciones.forEach(pa => {
@@ -34,8 +38,16 @@ router.get('/', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) =
             const st = Number(pa.stock || 0);
             totalStock += st;
             if (st > 0) totalReferencias += 1;
-            const precioUnidad = Number(prod.costo || prod.precio_detal || prod.precio || 0);
-            totalValoracion += (st * precioUnidad);
+            
+            const c = Number(prod.costo || 0);
+            if (c > 0) {
+              valorCosto += (st * c);
+            } else if (st > 0 || prod.activo !== false) {
+              productosSinCosto += 1;
+            }
+
+            const pVenta = Number(prod.precio_detal || prod.precio || 0);
+            valorVenta += (st * pVenta);
           } else {
             // Contar el servicio como referencia disponible si está activo
             totalReferencias += 1;
@@ -50,12 +62,15 @@ router.get('/', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) =
         ...plain,
         totalStock,
         totalReferencias,
-        totalValoracion,
+        totalValoracion: valorCosto,
+        valorCosto,
+        valorVenta,
+        productosSinCosto,
         usuariosAsignados
       };
     });
 
-    res.json(almacenesEnriquecidos);
+    res.json(sanitizarCostos(almacenesEnriquecidos, req.user));
   } catch (err) {
     console.error('[almacenes] GET / error:', err);
     res.status(500).json({ error: 'Error al obtener almacenes' });
@@ -63,7 +78,7 @@ router.get('/', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) =
 });
 
 // Obtener el inventario detallado de un almacén específico
-router.get('/:id/inventario', authRole(['admin', 'vendedor', 'admin_pos']), async (req, res) => {
+router.get('/:id/inventario', auth, async (req, res) => {
   try {
     const { id } = req.params;
     const almacen = await Almacen.findByPk(id);
@@ -100,7 +115,7 @@ router.get('/:id/inventario', authRole(['admin', 'vendedor', 'admin_pos']), asyn
 
     res.json({
       almacen: almacen.toJSON(),
-      inventario: inventarioDetalle
+      inventario: sanitizarCostos(inventarioDetalle, req.user)
     });
   } catch (err) {
     console.error('[almacenes] GET /:id/inventario error:', err);
@@ -109,7 +124,7 @@ router.get('/:id/inventario', authRole(['admin', 'vendedor', 'admin_pos']), asyn
 });
 
 // Crear un nuevo almacén (solo admin)
-router.post('/', authRole(['admin']), async (req, res) => {
+router.post('/', auth, requirePermiso('almacenes.gestionar'), async (req, res) => {
   try {
     const { codigo, nombre, ubicacion, telefono, email, responsable, direccion, ciudad } = req.body;
     if (!nombre || !String(nombre).trim()) {
@@ -136,7 +151,7 @@ router.post('/', authRole(['admin']), async (req, res) => {
 });
 
 // Editar almacén (solo admin)
-router.put('/:id', authRole(['admin']), async (req, res) => {
+router.put('/:id', auth, requirePermiso('almacenes.gestionar'), async (req, res) => {
   try {
     const { id } = req.params;
     const { codigo, nombre, ubicacion, telefono, email, responsable, direccion, ciudad, activo } = req.body;
@@ -167,7 +182,7 @@ router.put('/:id', authRole(['admin']), async (req, res) => {
 });
 
 // Eliminar o desactivar almacén (solo admin)
-router.delete('/:id', authRole(['admin']), async (req, res) => {
+router.delete('/:id', auth, requirePermiso('almacenes.gestionar'), async (req, res) => {
   try {
     const { id } = req.params;
     if (Number(id) === 1) {

@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const sequelize = require('../database/sequelize');
-const { authRole, authToken } = require('./auth');
+const auth = require('../middleware/auth');
+const requirePermiso = require('../middleware/roles');
 
-// List all producto_costos (with optional productoId filter)
-router.get('/', authRole(['admin']), async (req, res) => {
+// List all producto_costos (solo con permiso 'costos.ver')
+router.get('/', auth, requirePermiso('costos.ver'), async (req, res) => {
   try {
     const { productoId } = req.query;
     let sql = 'SELECT * FROM producto_costos';
@@ -23,7 +24,7 @@ router.get('/', authRole(['admin']), async (req, res) => {
 });
 
 // Create
-router.post('/', authRole(['admin']), async (req, res) => {
+router.post('/', auth, requirePermiso('costos.ver'), async (req, res) => {
   try {
     const { productoId, almacenId, costo, fecha_inicio, fecha_fin } = req.body;
     if (!productoId || !costo || !fecha_inicio) return res.status(400).json({ error: 'productoId, costo y fecha_inicio son requeridos' });
@@ -37,7 +38,7 @@ router.post('/', authRole(['admin']), async (req, res) => {
 });
 
 // Update
-router.put('/:id', authRole(['admin']), async (req, res) => {
+router.put('/:id', auth, requirePermiso('costos.ver'), async (req, res) => {
   try {
     const { id } = req.params;
     const { productoId, almacenId, costo, fecha_inicio, fecha_fin } = req.body;
@@ -51,7 +52,7 @@ router.put('/:id', authRole(['admin']), async (req, res) => {
 });
 
 // Delete
-router.delete('/:id', authRole(['admin']), async (req, res) => {
+router.delete('/:id', auth, requirePermiso('costos.ver'), async (req, res) => {
   try {
     const { id } = req.params;
     const sql = 'DELETE FROM producto_costos WHERE id = :id';

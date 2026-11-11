@@ -1,6 +1,11 @@
 const jwt = require('jsonwebtoken');
 const { Usuario } = require('../models');
 
+if (!process.env.JWT_SECRET) {
+  console.error("Falta JWT_SECRET en .env");
+  process.exit(1);
+}
+
 async function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : (req.cookies && req.cookies.token);
@@ -9,7 +14,7 @@ async function authMiddleware(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secreto123');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     // Refresh user from DB to ensure almacenId and role are current
     try {
       const dbUser = await Usuario.findByPk(decoded.id);

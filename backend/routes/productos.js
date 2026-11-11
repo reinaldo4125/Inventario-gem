@@ -1,7 +1,8 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const auth = require('../middleware/auth');
-const requireRole = require('../middleware/roles');
+const requirePermiso = require('../middleware/roles');
+const { almacenDelUsuario, sanitizarCostos } = require('../utils/almacenScope');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
@@ -31,63 +32,42 @@ function fileFilter (req, file, cb) {
 const upload = multer({ storage, fileFilter });
 
 
-// Obtener productos en stock crítico por almacén
-router.get('/stock-minimo', auth, async (req, res) => {
+// Obtener productos en stock crítico por almacén según regla unificada
+router.get('/stock-minimo', auth, requirePermiso('productos.ver'), async (req, res) => {
   try {
-    const { almacenId } = req.query;
-    const { Op } = require('sequelize');
-    const ProductoAlmacen = require('../models/ProductoAlmacen');
-
-    // Si se pasó almacenId, filtrar por ese almacén; si no, buscar en todas las asignaciones
-    const whereClause = almacenId ? { almacenId } : {};
-    const productosCriticos = await ProductoAlmacen.findAll({
-      where: whereClause,
-      include: [{
-        model: Producto,
-        where: {},
-        required: true
-      }]
-    });
-    // Filtrar por stock crítico usando el stock_minimo del producto (excluyendo servicios)
-    const resultado = productosCriticos
-      .filter(pa => {
-        const p = pa.Producto;
-        if (!p) return false;
-        const isServicio = p.tipo === 'servicio' || (p.categoria && p.categoria.toLowerCase().includes('servicio'));
-        if (isServicio) return false;
-        const min = (p.stock_minimo !== undefined && p.stock_minimo !== null && p.stock_minimo !== '') ? Number(p.stock_minimo) : 5;
-        const st = Number(pa.stock || 0);
-        return st <= min || st <= 0;
-      })
-      .map(pa => ({
-        nombre: pa.Producto ? pa.Producto.nombre : '',
-        stock: Number(pa.stock || 0),
-        stock_minimo: (pa.Producto && pa.Producto.stock_minimo !== undefined && pa.Producto.stock_minimo !== null && pa.Producto.stock_minimo !== '') ? Number(pa.Producto.stock_minimo) : 5,
-        productoId: pa.productoId,
-        almacenId: pa.almacenId
-      }));
-    res.json(resultado);
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && req.user.rol !== 'admin') return;
+    const almacenId = scopedAlmacenId || req.query.almacenId;
+    const { obtenerProductosCriticos } = require('../utils/stockCritico');
+    const resultado = await obtenerProductosCriticos({ almacenId });
+    res.json(sanitizarCostos(resultado, req.user));
   } catch (error) {
     console.error('[productos] stock-minimo error:', error && error.stack ? error.stack : error);
     res.status(500).json({ error: 'Error al obtener productos en stock crítico por almacén' });
   }
 });
 
-// Obtener conteo de productos en stock crítico por cada almacén (solo admin)
-router.get('/stock-minimo/por-almacen', auth, requireRole('admin'), async (req, res) => {
+// Obtener conteo de productos en stock crítico por cada almacén
+router.get('/stock-minimo/por-almacen', auth, requirePermiso('productos.ver'), async (req, res) => {
   try {
-    const sequelize = require('../database/sequelize');
-    const sql = `SELECT a.id as almacenId, a.nombre as almacenNombre, COUNT(*) as cantidad_critica
-      FROM producto_almacen pa
-      JOIN productos p ON pa.productoId = p.id
-      JOIN almacenes a ON pa.almacenId = a.id
-      WHERE (p.tipo IS NULL OR p.tipo != 'servicio')
-        AND (pa.stock <= COALESCE(NULLIF(p.stock_minimo, 0), 5) OR pa.stock <= 0)
-      GROUP BY a.id, a.nombre
-      ORDER BY a.nombre`;
-    const rows = await sequelize.query(sql, { type: require('sequelize').QueryTypes.SELECT });
-    // Normalize numbers
-    const result = rows.map(r => ({ almacenId: r.almacenId, almacenNombre: r.almacenNombre, cantidad: Number(r.cantidad_critica || 0) }));
+    const { obtenerProductosCriticos } = require('../utils/stockCritico');
+    const Almacen = require('../models/Almacen');
+    const todosAlmacenes = await Almacen.findAll({ where: { activo: true }, order: [['nombre', 'ASC']] });
+    const todasAlertas = await obtenerProductosCriticos();
+
+    const conteoPorAlmacen = {};
+    for (const a of todasAlertas) {
+      if (a.almacenId) {
+        conteoPorAlmacen[a.almacenId] = (conteoPorAlmacen[a.almacenId] || 0) + 1;
+      }
+    }
+
+    const result = todosAlmacenes.map(alm => ({
+      almacenId: alm.id,
+      almacenNombre: alm.nombre,
+      cantidad: conteoPorAlmacen[alm.id] || 0
+    }));
+
     res.json(result);
   } catch (error) {
     console.error('[productos] stock-minimo/por-almacen error:', error);
@@ -96,14 +76,14 @@ router.get('/stock-minimo/por-almacen', auth, requireRole('admin'), async (req, 
 });
 
 // Ruta para subir imagen
-router.post('/upload', auth, requireRole('admin'), upload.single('file'), (req, res) => {
+router.post('/upload', auth, requirePermiso('productos.crear'), upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No se subió archivo' });
   const url = `http://localhost:4000/uploads/${req.file.filename}`;
   res.json({ url });
 });
 
 // Editar un producto por ID y actualizar stock solo en el almacén del usuario
-router.put('/:id', auth, requireRole('admin'), [
+router.put('/:id', auth, requirePermiso('productos.editar'), [
   body('nombre').notEmpty().withMessage('El nombre es obligatorio'),
   body('precio').optional().custom((value) => {
     if (value === undefined || value === null || value === '') return true;
@@ -199,13 +179,19 @@ router.put('/:id', auth, requireRole('admin'), [
     let stockMinNum = stock_minimo !== undefined && stock_minimo !== null && stock_minimo !== '' ? parseInt(stock_minimo, 10) : 0;
     if (isNaN(stockMinNum)) stockMinNum = 0;
 
-    // Actualizar datos generales del producto (sin el stock)
+    // Actualizar datos generales del producto
+    const isTipoServicio = tipo === 'servicio' || (categoria && categoria.toLowerCase().includes('servicio'));
     const [actualizado] = await Producto.update({
-      nombre, descripcion, categoria, marca, modelo, compatibilidad, codigo_oem, stock_minimo: stockMinNum, costo, ubicacion_bodega, unidad_medida, proveedor, precio, precio_detal, precio_mayor, precio_almacen, foto, tipo: tipo || 'producto', lote: lote || null, fecha_vencimiento: fecha_vencimiento || null
+      nombre, descripcion, categoria, marca, modelo, compatibilidad, codigo_oem, stock_minimo: stockMinNum, costo, ubicacion_bodega, unidad_medida, proveedor, precio, precio_detal, precio_mayor, precio_almacen, foto, tipo: isTipoServicio ? 'servicio' : (tipo || 'producto'), lote: lote || null, fecha_vencimiento: fecha_vencimiento || null,
+      stock: isTipoServicio ? 0 : undefined
     }, { where: { id } });
+
     if (actualizado) {
-      // Si se envía el campo stock y hay almacenId, actualizarlo solo en producto_almacen para el almacén del usuario
-      if (typeof stock !== 'undefined' && almacenId) {
+      if (isTipoServicio) {
+        // Un servicio no debe tener existencias en producto_almacen
+        await ProductoAlmacen.update({ stock: 0 }, { where: { productoId: id } });
+        await Producto.update({ stock: 0 }, { where: { id } });
+      } else if (typeof stock !== 'undefined' && almacenId) {
         let stockNum = stock;
         if (typeof stock === 'string' && stock !== '') {
           stockNum = parseInt(stock, 10);
@@ -218,8 +204,8 @@ router.put('/:id', auth, requireRole('admin'), [
       }
       // Devolver el producto actualizado con el stock de ese almacén (o null si no hay almacenId)
       const productoActualizado = await Producto.findByPk(id);
-      let stockAlmacen = null;
-      if (almacenId) {
+      let stockAlmacen = isTipoServicio ? 0 : null;
+      if (almacenId && !isTipoServicio) {
         const pa = await ProductoAlmacen.findOne({ where: { productoId: id, almacenId } });
         stockAlmacen = pa ? pa.stock : null;
       }
@@ -234,7 +220,7 @@ router.put('/:id', auth, requireRole('admin'), [
 });
 
 // Eliminar un producto por ID (o archivar si tiene historial de ventas/facturas)
-router.delete('/:id', auth, requireRole('admin'), async (req, res) => {
+router.delete('/:id', auth, requirePermiso('productos.editar'), async (req, res) => {
   try {
     const id = req.params.id;
     console.log('[productos] DELETE /:id called by user=', req.user ? `${req.user.id}(${req.user.rol})` : 'anonymous', 'productoId=', id);
@@ -279,7 +265,7 @@ router.delete('/:id', auth, requireRole('admin'), async (req, res) => {
 });
 
 // Archivar (soft-delete) un producto: marca activo = false
-router.put('/:id/archivar', auth, requireRole('admin'), async (req, res) => {
+router.put('/:id/archivar', auth, requirePermiso('productos.editar'), async (req, res) => {
   try {
     const id = req.params.id;
     console.log('[productos] ARCHIVAR /:id called by user=', req.user ? `${req.user.id}(${req.user.rol})` : 'anonymous', 'productoId=', id);
@@ -295,8 +281,8 @@ router.put('/:id/archivar', auth, requireRole('admin'), async (req, res) => {
   }
 });
 
-// Obtener productos, filtrando por almacén si se pasa almacenId en la query (solo productos activos)
-router.get('/', auth, async (req, res) => {
+// Obtener productos, filtrando por almacén según rol (solo productos activos)
+router.get('/', auth, requirePermiso('productos.ver'), async (req, res) => {
   try {
     const { Op } = require('sequelize');
     const { incluirArchivados } = req.query;
@@ -308,21 +294,21 @@ router.get('/', auth, async (req, res) => {
       ]
     };
 
-    console.log('[productos] GET / called by user=', req.user ? `${req.user.id}(${req.user.rol}) almacén=${req.user.almacenId}` : 'anonymous');
-    const almacenIdQuery = req.query.almacenId ? parseInt(req.query.almacenId, 10) : null;
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && req.user.rol !== 'admin') return;
     
     if (req.user.rol === 'admin') {
-      if (almacenIdQuery) {
+      if (scopedAlmacenId) {
         const productosAlmacen = await ProductoAlmacen.findAll({
-          where: { almacenId: almacenIdQuery },
+          where: { almacenId: scopedAlmacenId },
           include: [{ model: Producto, where: whereActivo }]
         });
         const productos = productosAlmacen.map(pa => ({
           ...pa.Producto?.toJSON(),
           stock: pa.stock,
-          almacenId: almacenIdQuery
+          almacenId: scopedAlmacenId
         }));
-        res.json(productos);
+        res.json(sanitizarCostos(productos, req.user));
         return;
       } else {
         const productos = await Producto.findAll({
@@ -343,7 +329,7 @@ router.get('/', auth, async (req, res) => {
           const stockTotal = almacenes.reduce((acc, a) => acc + (a.stock || 0), 0);
           return { ...p.toJSON(), almacenes, stockTotal };
         });
-        res.json(productosConAlmacenes);
+        res.json(sanitizarCostos(productosConAlmacenes, req.user));
         return;
       }
     }
@@ -359,7 +345,7 @@ router.get('/', auth, async (req, res) => {
       }]
     });
 
-    const almacenId = req.user.almacenId;
+    const almacenId = scopedAlmacenId;
 
     const productosFormatted = productos.map(p => {
       const pJson = p.toJSON();
@@ -387,15 +373,15 @@ router.get('/', auth, async (req, res) => {
       };
     });
 
-    res.json(productosFormatted);
+    res.json(sanitizarCostos(productosFormatted, req.user));
   } catch (error) {
     console.error('[productos] GET / error:', error);
     res.status(500).json({ error: 'Error al obtener productos' });
   }
 });
 
-// Obtener un producto por ID (diagnóstico)
-router.get('/:id', auth, async (req, res) => {
+// Obtener un producto por ID
+router.get('/:id', auth, requirePermiso('productos.ver'), async (req, res) => {
   try {
     const id = req.params.id;
     const producto = await Producto.findByPk(id, {
@@ -407,9 +393,8 @@ router.get('/:id', auth, async (req, res) => {
       }]
     });
     if (!producto) return res.status(404).json({ error: 'Producto no encontrado' });
-    // Añadir campo activo si existe en la instancia
     const p = producto.toJSON();
-    res.json(p);
+    res.json(sanitizarCostos(p, req.user));
   } catch (error) {
     console.error('[productos] GET /:id error:', error && error.stack ? error.stack : error);
     res.status(500).json({ error: 'Error al obtener producto' });
@@ -417,7 +402,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Crear un nuevo producto y su stock en el almacén del usuario
-router.post('/', auth, requireRole('admin'), [
+router.post('/', auth, requirePermiso('productos.crear'), [
   body('nombre').notEmpty().withMessage('El nombre es obligatorio'),
   body('precio').optional().custom((value) => {
     if (value === undefined || value === null || value === '') return true;
@@ -512,20 +497,10 @@ router.post('/', auth, requireRole('admin'), [
       nombre, descripcion, categoria, marca, modelo, compatibilidad, codigo_oem, stock_minimo: stockMinNum, costo, ubicacion_bodega, unidad_medida: unidad_medida || (tipo === 'servicio' ? 'Servicio' : 'Unidad'), proveedor, precio, precio_detal, precio_mayor, precio_almacen, foto, tipo: tipo || 'producto', lote: lote || null, fecha_vencimiento: fecha_vencimiento || null, activo: true
     });
     
-    // Si el item es un servicio, registrar en todos los almacenes con stock 0
-    if (tipo === 'servicio') {
-      try {
-        const Almacen = require('../models/Almacen');
-        const todosAlmacenes = await Almacen.findAll();
-        for (const alm of todosAlmacenes) {
-          await ProductoAlmacen.findOrCreate({
-            where: { productoId: nuevoProducto.id, almacenId: alm.id },
-            defaults: { stock: 0 }
-          });
-        }
-      } catch (e) {
-        console.error('Error al inicializar registro de servicio en almacenes:', e);
-      }
+    // Si el item es un servicio, no crear existencias ni filas en almacenes
+    const esServicio = (tipo === 'servicio') || (categoria && categoria.toLowerCase().includes('servicio'));
+    if (esServicio) {
+      // Los servicios no manejan existencias en producto_almacen
     } else if (almacenId) {
       // Si el usuario tiene almacenId, crear el registro de stock para ese almacén
       await ProductoAlmacen.create({
@@ -546,7 +521,7 @@ router.post('/', auth, requireRole('admin'), [
     }
     const productoConStock = {
       ...nuevoProducto.toJSON(),
-      stock: stock
+      stock: esServicio ? 0 : stock
     };
     res.status(201).json(productoConStock);
   } catch (error) {
@@ -556,7 +531,7 @@ router.post('/', auth, requireRole('admin'), [
 });
 
 // Duplicar un producto por ID
-router.post('/:id/duplicar', auth, requireRole('admin'), async (req, res) => {
+router.post('/:id/duplicar', auth, requirePermiso('productos.crear'), async (req, res) => {
   try {
     const id = req.params.id;
     const productoBase = await Producto.findByPk(id);
@@ -587,13 +562,24 @@ router.post('/:id/duplicar', auth, requireRole('admin'), async (req, res) => {
 });
 
 // Ajustar stock rápido para un almacén determinado
-router.post('/:id/ajuste-stock', auth, requireRole('admin'), async (req, res) => {
+router.post('/:id/ajuste-stock', auth, requirePermiso('stock.ajustar'), async (req, res) => {
   try {
     const productoId = req.params.id;
     const { almacenId, nuevoStock, motivo } = req.body;
     if (!almacenId || nuevoStock === undefined || nuevoStock === null) {
       return res.status(400).json({ error: 'Faltan parámetros requeridos (almacenId, nuevoStock)' });
     }
+
+    if (req.user.rol !== 'admin' && Number(almacenId) !== Number(req.user.almacenId)) {
+      return res.status(403).json({ error: 'Solo puede ajustar stock de su sede asignada' });
+    }
+
+    const producto = await Producto.findByPk(productoId);
+    if (!producto) return res.status(404).json({ error: 'Producto no encontrado' });
+    if (producto.tipo === 'servicio' || (producto.categoria && producto.categoria.toLowerCase().includes('servicio'))) {
+      return res.status(400).json({ error: 'Los servicios no manejan inventario ni existencias.' });
+    }
+
     const stockVal = Math.max(0, parseInt(nuevoStock, 10) || 0);
 
     const [pa, created] = await ProductoAlmacen.findOrCreate({
@@ -615,14 +601,28 @@ router.post('/:id/ajuste-stock', auth, requireRole('admin'), async (req, res) =>
 });
 
 // Asignar stock de un producto a varios almacenes
-router.post('/:id/asignar-almacenes', auth, requireRole('admin'), async (req, res) => {
+router.post('/:id/asignar-almacenes', auth, requirePermiso('stock.ajustar'), async (req, res) => {
   try {
     const productoId = req.params.id;
     const { asignaciones } = req.body; // [{ almacenId, stock }]
-  console.log('[productos] asignar-almacenes called for productoId=', productoId);
     if (!Array.isArray(asignaciones)) {
       return res.status(400).json({ error: 'Datos inválidos' });
     }
+
+    if (req.user.rol !== 'admin') {
+      for (const item of asignaciones) {
+        if (Number(item.almacenId) !== Number(req.user.almacenId)) {
+          return res.status(403).json({ error: 'Solo puede asignar stock a su sede asignada' });
+        }
+      }
+    }
+
+    const producto = await Producto.findByPk(productoId);
+    if (!producto) return res.status(404).json({ error: 'Producto no encontrado' });
+    if (producto.tipo === 'servicio' || (producto.categoria && producto.categoria.toLowerCase().includes('servicio'))) {
+      return res.status(400).json({ error: 'Los servicios no manejan inventario ni existencias.' });
+    }
+
     // Actualizar o crear stock para cada almacén
     for (const item of asignaciones) {
       const almacenId = item.almacenId;
@@ -648,10 +648,8 @@ router.post('/:id/asignar-almacenes', auth, requireRole('admin'), async (req, re
   }
 });
 
-// Aquí puedes agregar más rutas: PUT, DELETE, etc.
-
 // Obtener productos sin stock en ningún almacén
-router.get('/sin-almacen', auth, async (req, res) => {
+router.get('/sin-almacen', auth, requirePermiso('productos.ver'), async (req, res) => {
   try {
     // Buscar productos que no tienen ninguna asignación en ProductoAlmacen
     const productosConAlmacen = await ProductoAlmacen.findAll({ attributes: ['productoId'] });
@@ -661,14 +659,14 @@ router.get('/sin-almacen', auth, async (req, res) => {
         id: { [require('sequelize').Op.notIn]: productosIdsConAlmacen }
       }
     });
-    res.json(productosSinAlmacen);
+    res.json(sanitizarCostos(productosSinAlmacen, req.user));
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener productos sin almacén' });
   }
 });
 
-// Endpoint de diagnóstico: contar referencias que podrían impedir eliminar el producto
-router.post('/import-masivo', auth, requireRole('admin'), async (req, res) => {
+// Endpoint de importación masiva de productos
+router.post('/import-masivo', auth, requirePermiso('productos.crear'), async (req, res) => {
   try {
     const { items, almacenId, actualizarExistentes } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
@@ -800,7 +798,7 @@ router.post('/import-masivo', auth, requireRole('admin'), async (req, res) => {
   }
 });
 
-router.get('/:id/referencias', auth, requireRole('admin'), async (req, res) => {
+router.get('/:id/referencias', auth, requirePermiso('productos.ver'), async (req, res) => {
   try {
     const productoId = req.params.id;
     const resultados = {};

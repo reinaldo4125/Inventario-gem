@@ -1,24 +1,29 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { authRole, authToken } = require('./auth');
+const auth = require('../middleware/auth');
+const requirePermiso = require('../middleware/roles');
+const { almacenDelUsuario } = require('../utils/almacenScope');
 const { Op } = require('sequelize');
 const router = express.Router();
 const Cliente = require('../models/Cliente');
 const Almacen = require('../models/Almacen');
 
 // Obtener todos los clientes
-router.get('/', authToken, async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     let where = {};
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && req.user.rol !== 'admin') return;
+
     if (req.user.rol === 'admin') {
-      if (req.query.almacenId) {
-        where.almacenId = req.query.almacenId;
+      if (scopedAlmacenId) {
+        where.almacenId = scopedAlmacenId;
       }
-    } else if (req.user.almacenId) {
-      // Vendedores o personal de almacén ven los de su almacén y los generales (sin almacén)
+    } else if (scopedAlmacenId) {
+      // Vendedores o administradores de punto ven los de su almacén y los generales (sin almacén)
       where = {
         [Op.or]: [
-          { almacenId: req.user.almacenId },
+          { almacenId: scopedAlmacenId },
           { almacenId: null }
         ]
       };
@@ -43,23 +48,25 @@ router.get('/', authToken, async (req, res) => {
   }
 });
 
-// Obtener solo clientes sin almacén asignado
-router.get('/sin-almacen', authToken, async (req, res) => {
+// Obtener clientes sin almacén asignado
+router.get('/sin-almacen', auth, async (req, res) => {
   try {
     const clientes = await Cliente.findAll({
       where: { almacenId: null },
-      include: [{ model: Almacen, as: 'almacen', attributes: ['id', 'nombre'] }]
+      order: [['nombre', 'ASC']]
     });
     res.json(clientes);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener clientes sin almacén: ' + error.message });
+    res.status(500).json({ error: 'Error al obtener clientes sin almacén' });
   }
 });
 
-// Obtener un cliente por ID
-router.get('/:id', authToken, async (req, res) => {
+// Obtener cliente por ID
+router.get('/:id', auth, async (req, res) => {
   try {
-    const cliente = await Cliente.findByPk(req.params.id);
+    const cliente = await Cliente.findByPk(req.params.id, {
+      include: [{ model: Almacen, as: 'almacen' }]
+    });
     if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
     res.json(cliente);
   } catch (error) {
@@ -68,7 +75,7 @@ router.get('/:id', authToken, async (req, res) => {
 });
 
 // Crear un nuevo cliente
-router.post('/', authRole(['admin', 'vendedor']), [
+router.post('/', auth, requirePermiso('clientes.crear'), [
   body('nombre').notEmpty().withMessage('El nombre es obligatorio'),
   body('documento').notEmpty().withMessage('El documento es obligatorio'),
   body('tipo_cliente').notEmpty().withMessage('El tipo de cliente es obligatorio'),
@@ -102,7 +109,7 @@ router.post('/', authRole(['admin', 'vendedor']), [
 });
 
 // Actualizar un cliente
-router.put('/:id', authRole(['admin', 'vendedor']), [
+router.put('/:id', auth, requirePermiso('clientes.editar'), [
   body('nombre').notEmpty().withMessage('El nombre es obligatorio'),
   body('documento').notEmpty().withMessage('El documento es obligatorio'),
   body('tipo_cliente').notEmpty().withMessage('El tipo de cliente es obligatorio'),
@@ -137,7 +144,7 @@ router.put('/:id', authRole(['admin', 'vendedor']), [
 });
 
 // Carga masiva de clientes desde CSV
-router.post('/import-masivo', authRole(['admin', 'vendedor']), async (req, res) => {
+router.post('/import-masivo', auth, requirePermiso('clientes.crear'), async (req, res) => {
   try {
     const { items, actualizarExistentes } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
@@ -148,74 +155,48 @@ router.post('/import-masivo', authRole(['admin', 'vendedor']), async (req, res) 
     let actualizados = 0;
     let errores = [];
 
-    const defaultAlmacenId = req.user?.almacenId || null;
-
-    for (let index = 0; index < items.length; index++) {
-      const item = items[index];
-      const fila = index + 2;
-
-      if (!item.nombre || !String(item.nombre).trim()) {
-        errores.push(`Fila ${fila}: El 'nombre' del cliente es obligatorio.`);
-        continue;
-      }
-      if (!item.documento || !String(item.documento).trim()) {
-        errores.push(`Fila ${fila}: El 'documento' del cliente es obligatorio.`);
-        continue;
-      }
-
+    for (const item of items) {
       try {
-        const nombre = String(item.nombre).trim();
-        const documento = String(item.documento).trim();
+        if (!item.documento || !item.nombre) {
+          errores.push(`Fila sin nombre o documento: ${JSON.stringify(item)}`);
+          continue;
+        }
 
-        const parseNum = (val, defaultVal = 0) => {
-          if (val === undefined || val === null || val === '') return defaultVal;
-          if (typeof val === 'string') {
-            const cleaned = val.replace(/\$/g, '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-            const parsed = parseFloat(cleaned);
-            return isNaN(parsed) ? defaultVal : parsed;
-          }
-          return typeof val === 'number' ? val : defaultVal;
-        };
-
-        const clienteExistente = await Cliente.findOne({ where: { documento } });
-
-        const dataCliente = {
-          nombre,
-          documento,
-          tipo_documento: item.tipo_documento || 'NIT',
-          tipo_cliente: item.tipo_cliente || 'Detal',
-          empresa: item.empresa || null,
-          telefono: item.telefono || null,
-          correo: item.correo || null,
-          direccion: item.direccion || null,
-          ciudad: item.ciudad || null,
-          departamento: item.departamento || null,
-          pais: item.pais || 'Colombia',
-          descuentoEspecial: parseNum(item.descuentoEspecial, 0),
-          cupoCredito: parseNum(item.cupoCredito, 0),
-          notas: item.notas || null,
-          almacenId: item.almacenId || defaultAlmacenId,
-          activo: true
-        };
-
-        if (clienteExistente) {
+        const existe = await Cliente.findOne({ where: { documento: String(item.documento).trim() } });
+        if (existe) {
           if (actualizarExistentes) {
-            await clienteExistente.update(dataCliente);
+            await existe.update({
+              nombre: item.nombre || existe.nombre,
+              telefono: item.telefono || existe.telefono,
+              direccion: item.direccion || existe.direccion,
+              correo: item.correo || existe.correo,
+              tipo_cliente: item.tipo_cliente || existe.tipo_cliente,
+              ciudad: item.ciudad || existe.ciudad
+            });
             actualizados++;
-          } else {
-            errores.push(`Fila ${fila}: Ya existe cliente con documento '${documento}' (${nombre}). (Omitido)`);
           }
         } else {
-          await Cliente.create(dataCliente);
+          await Cliente.create({
+            documento: String(item.documento).trim(),
+            nombre: item.nombre,
+            tipo_documento: item.tipo_documento || 'CC',
+            telefono: item.telefono || '',
+            direccion: item.direccion || '',
+            correo: item.correo || '',
+            tipo_cliente: item.tipo_cliente || 'Final',
+            ciudad: item.ciudad || '',
+            almacenId: req.user.almacenId || item.almacenId || null,
+            activo: true
+          });
           creados++;
         }
-      } catch (rowErr) {
-        errores.push(`Fila ${fila}: ${rowErr.message || 'Error al procesar cliente'}`);
+      } catch (errFila) {
+        errores.push(`Error en documento ${item.documento}: ${errFila.message}`);
       }
     }
 
     res.json({
-      ok: true,
+      mensaje: `Importación completada: ${creados} creados, ${actualizados} actualizados`,
       creados,
       actualizados,
       errores,
@@ -228,7 +209,7 @@ router.post('/import-masivo', authRole(['admin', 'vendedor']), async (req, res) 
 });
 
 // Cambiar estado Activo / Inactivo de un cliente
-router.patch('/:id/toggle-estado', authRole(['admin', 'vendedor']), async (req, res) => {
+router.patch('/:id/toggle-estado', auth, requirePermiso('clientes.editar'), async (req, res) => {
   try {
     const cliente = await Cliente.findByPk(req.params.id);
     if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });
@@ -241,8 +222,8 @@ router.patch('/:id/toggle-estado', authRole(['admin', 'vendedor']), async (req, 
   }
 });
 
-// Eliminar un cliente
-router.delete('/:id', authRole(['admin']), async (req, res) => {
+// Eliminar un cliente (solo admin con clientes.borrar)
+router.delete('/:id', auth, requirePermiso('clientes.borrar'), async (req, res) => {
   try {
     const cliente = await Cliente.findByPk(req.params.id);
     if (!cliente) return res.status(404).json({ error: 'Cliente no encontrado' });

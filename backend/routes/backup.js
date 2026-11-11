@@ -1,12 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { authRole } = require('../middleware/auth');
+const auth = require('../middleware/auth');
+const requirePermiso = require('../middleware/roles');
 const models = require('../models');
 const path = require('path');
 const fs = require('fs');
 
-// Exportar Backup Completo en JSON
-router.get('/export-json', authRole(['admin']), async (req, res) => {
+// Exportar Backup Completo en JSON (solo admin con permiso 'backup')
+router.get('/export-json', auth, requirePermiso('backup'), async (req, res) => {
   try {
     const backupData = {
       fecha_exportacion: new Date().toISOString(),
@@ -34,7 +35,7 @@ router.get('/export-json', authRole(['admin']), async (req, res) => {
 });
 
 // Descargar archivo sqlite si existe
-router.get('/download-db', authRole(['admin']), async (req, res) => {
+router.get('/download-db', auth, requirePermiso('backup'), async (req, res) => {
   try {
     const dbPath = path.join(__dirname, '../database.sqlite');
     if (fs.existsSync(dbPath)) {

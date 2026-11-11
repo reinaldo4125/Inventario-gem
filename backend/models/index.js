@@ -13,12 +13,22 @@ const Traslado = require('./Traslado');
 const DetalleTraslado = require('./DetalleTraslado');
 const Kardex = require('./Kardex');
 const Caja = require('./Caja');
+const Abono = require('./Abono');
 
 // Relaciones
 Venta.belongsTo(Cliente, { foreignKey: 'clienteId' });
 Venta.hasMany(DetalleVenta, { foreignKey: 'ventaId' });
 DetalleVenta.belongsTo(Venta, { foreignKey: 'ventaId' });
 DetalleVenta.belongsTo(Producto, { foreignKey: 'productoId' });
+
+// Relación Facturas y Abonos (Cuentas por Cobrar)
+Factura.hasMany(Abono, { foreignKey: 'facturaId', as: 'Abonos' });
+Abono.belongsTo(Factura, { foreignKey: 'facturaId', as: 'Factura' });
+
+// Relación Facturas y Ventas
+if (!Venta.associations.factura) {
+  Venta.belongsTo(Factura, { foreignKey: 'facturaId', as: 'factura' });
+}
 
 // Relación de costes de producto
 Producto.hasMany(ProductoCosto, { foreignKey: 'productoId' });
@@ -54,6 +64,7 @@ module.exports = {
   Traslado,
   DetalleTraslado,
   Kardex,
-  Caja
+  Caja,
+  Abono
 };
 

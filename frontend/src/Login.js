@@ -45,8 +45,18 @@ function Login({ onLogin }) {
         body: JSON.stringify({ correo, password })
       });
       if (!res.ok) {
-        if (res.status === 401) throw new Error('Credenciales incorrectas');
-        throw new Error('Error del servidor. Intenta de nuevo más tarde.');
+        let errorMsg = '';
+        try {
+          const errData = await res.json();
+          errorMsg = errData?.error || errData?.mensaje || '';
+        } catch {}
+        if (!errorMsg) {
+          if (res.status === 401) errorMsg = 'Credenciales incorrectas';
+          else if (res.status === 403) errorMsg = 'Cuenta desactivada o sin permisos de acceso';
+          else if (res.status === 429) errorMsg = 'Demasiados intentos. Por favor espera un momento.';
+          else errorMsg = 'Error del servidor. Intenta de nuevo más tarde.';
+        }
+        throw new Error(errorMsg);
       }
       const data = await res.json();
       if (data.token) {

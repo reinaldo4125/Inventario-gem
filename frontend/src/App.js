@@ -39,6 +39,8 @@ import EmpresaForm from './EmpresaForm';
 import Almacenes from './Almacenes';
 import PerfilVendedor from './PerfilVendedor';
 import Caja from './Caja';
+import Cartera from './Cartera';
+import { puede, nombreRol } from './config/permisos';
 // ToastContainer global deshabilitado temporalmente para evitar error de tipo de elemento inválido en producción
 // import { ToastContainer } from 'react-toastify';
 // import 'react-toastify/dist/ReactToastify.css';
@@ -200,7 +202,7 @@ function App() {
         </div>
         <div className="header-user-info">
           <span className="user-badge">
-            👤 <strong>{usuario.nombre}</strong> ({usuario.rol === 'admin_pos' ? 'Admin Punto de Venta' : usuario.rol === 'admin' ? 'Administrador Global' : usuario.rol})
+            👤 <strong>{usuario.nombre}</strong> ({nombreRol(usuario.rol)})
           </span>
           <button 
             className="btn-principal btn-peligro" 
@@ -214,173 +216,128 @@ function App() {
 
       <div className="menu-nav-container">
         <nav className="menu-nav">
-          <button 
-            onClick={() => setSeccion('dashboard')} 
-            className={`nav-btn ${seccion === 'dashboard' ? 'active' : ''}`}
-          >
-            📊 Dashboard
-          </button>
-
-          {usuario.rol === 'admin' && (
-            <>
-              <button 
-                onClick={() => setSeccion('usuarios')} 
-                className={`nav-btn ${seccion === 'usuarios' ? 'active' : ''}`}
-              >
-                👥 Usuarios
-              </button>
-              <button 
-                onClick={() => setSeccion('clientes')} 
-                className={`nav-btn ${seccion === 'clientes' ? 'active' : ''}`}
-              >
-                👤 Clientes
-              </button>
-              <button 
-                onClick={() => setSeccion('productos')} 
-                className={`nav-btn ${seccion === 'productos' ? 'active' : ''}`}
-              >
-                📦 Productos
-              </button>
-              <button 
-                onClick={() => setSeccion('almacenes')} 
-                className={`nav-btn ${seccion === 'almacenes' ? 'active' : ''}`}
-              >
-                🏬 Almacenes
-              </button>
-              <button 
-                onClick={() => setSeccion('ventas')} 
-                className={`nav-btn ${seccion === 'ventas' ? 'active' : ''}`}
-              >
-                🛒 Ventas
-              </button>
-              <button 
-                onClick={() => setSeccion('facturacion')} 
-                className={`nav-btn ${seccion === 'facturacion' ? 'active' : ''}`}
-              >
-                📄 Facturación
-              </button>
-              <button 
-                onClick={() => setSeccion('caja')} 
-                className={`nav-btn ${seccion === 'caja' ? 'active' : ''}`}
-              >
-                💵 Arqueo de Caja
-              </button>
-              <button 
-                onClick={() => setSeccion('reportes')} 
-                className={`nav-btn ${seccion === 'reportes' ? 'active' : ''}`}
-              >
-                📈 Reportes
-              </button>
-              <button 
-                onClick={() => setSeccion('empresa')} 
-                className={`nav-btn ${seccion === 'empresa' ? 'active' : ''}`}
-              >
-                🏢 Empresa
-              </button>
-            </>
+          {puede(usuario, ['dashboard.ver', 'dashboard.stock']) && (
+            <button 
+              onClick={() => setSeccion('dashboard')} 
+              className={`nav-btn ${seccion === 'dashboard' ? 'active' : ''}`}
+            >
+              📊 Dashboard
+            </button>
           )}
 
-          {usuario.rol === 'admin_pos' && (
-            <>
-              <button 
-                onClick={() => setSeccion('ventas')} 
-                className={`nav-btn ${seccion === 'ventas' ? 'active' : ''}`}
-              >
-                🛒 Ventas
-              </button>
-              <button 
-                onClick={() => setSeccion('facturacion')} 
-                className={`nav-btn ${seccion === 'facturacion' ? 'active' : ''}`}
-              >
-                📄 Facturación
-              </button>
-              <button 
-                onClick={() => setSeccion('caja')} 
-                className={`nav-btn ${seccion === 'caja' ? 'active' : ''}`}
-              >
-                💵 Arqueo de Caja
-              </button>
-              <button 
-                onClick={() => setSeccion('productos')} 
-                className={`nav-btn ${seccion === 'productos' ? 'active' : ''}`}
-              >
-                📦 Productos
-              </button>
-              <button 
-                onClick={() => setSeccion('clientes')} 
-                className={`nav-btn ${seccion === 'clientes' ? 'active' : ''}`}
-              >
-                👤 Clientes
-              </button>
-              <button 
-                onClick={() => setSeccion('usuarios')} 
-                className={`nav-btn ${seccion === 'usuarios' ? 'active' : ''}`}
-              >
-                👥 Personal Sede
-              </button>
-              <button 
-                onClick={() => setSeccion('reportes')} 
-                className={`nav-btn ${seccion === 'reportes' ? 'active' : ''}`}
-              >
-                📈 Reportes Sede
-              </button>
-            </>
+          {puede(usuario, 'ventas.crear') && (
+            <button 
+              onClick={() => setSeccion('ventas')} 
+              className={`nav-btn ${seccion === 'ventas' ? 'active' : ''}`}
+            >
+              🛒 Ventas
+            </button>
+          )}
+
+          {puede(usuario, 'facturas.crear') && (
+            <button 
+              onClick={() => setSeccion('facturacion')} 
+              className={`nav-btn ${seccion === 'facturacion' ? 'active' : ''}`}
+            >
+              📄 Facturación
+            </button>
+          )}
+
+          {puede(usuario, 'cartera.ver') && (
+            <button 
+              onClick={() => setSeccion('cartera')} 
+              className={`nav-btn ${seccion === 'cartera' ? 'active' : ''}`}
+            >
+              📑 Cartera / CxC
+            </button>
+          )}
+
+          {puede(usuario, 'caja.operar') && (
+            <button 
+              onClick={() => setSeccion('caja')} 
+              className={`nav-btn ${seccion === 'caja' ? 'active' : ''}`}
+            >
+              💵 Arqueo de Caja
+            </button>
+          )}
+
+          {puede(usuario, 'productos.ver') && (
+            <button 
+              onClick={() => setSeccion('productos')} 
+              className={`nav-btn ${seccion === 'productos' ? 'active' : ''}`}
+            >
+              📦 Productos
+            </button>
+          )}
+
+          {puede(usuario, ['clientes.crear', 'clientes.editar']) && (
+            <button 
+              onClick={() => setSeccion('clientes')} 
+              className={`nav-btn ${seccion === 'clientes' ? 'active' : ''}`}
+            >
+              👤 Clientes
+            </button>
+          )}
+
+          {puede(usuario, 'usuarios.gestionar_vendedores') && (
+            <button 
+              onClick={() => setSeccion('usuarios')} 
+              className={`nav-btn ${seccion === 'usuarios' ? 'active' : ''}`}
+            >
+              👥 {usuario.rol === 'admin_pos' ? 'Personal Sede' : 'Usuarios'}
+            </button>
+          )}
+
+          {puede(usuario, 'almacenes.gestionar') && (
+            <button 
+              onClick={() => setSeccion('almacenes')} 
+              className={`nav-btn ${seccion === 'almacenes' ? 'active' : ''}`}
+            >
+              🏬 Almacenes
+            </button>
+          )}
+
+          {puede(usuario, ['reportes.ver', 'reportes.ver_propios']) && (
+            <button 
+              onClick={() => setSeccion('reportes')} 
+              className={`nav-btn ${seccion === 'reportes' ? 'active' : ''}`}
+            >
+              📈 {usuario.rol === 'admin_pos' ? 'Reportes Sede' : 'Reportes'}
+            </button>
+          )}
+
+          {puede(usuario, 'empresa.editar') && (
+            <button 
+              onClick={() => setSeccion('empresa')} 
+              className={`nav-btn ${seccion === 'empresa' ? 'active' : ''}`}
+            >
+              🏢 Empresa
+            </button>
           )}
 
           {usuario.rol === 'vendedor' && (
-            <>
-              <button 
-                onClick={() => setSeccion('ventas')} 
-                className={`nav-btn ${seccion === 'ventas' ? 'active' : ''}`}
-              >
-                🛒 Ventas
-              </button>
-              <button 
-                onClick={() => setSeccion('caja')} 
-                className={`nav-btn ${seccion === 'caja' ? 'active' : ''}`}
-              >
-                💵 Arqueo de Caja
-              </button>
-              <button 
-                onClick={() => setSeccion('clientes')} 
-                className={`nav-btn ${seccion === 'clientes' ? 'active' : ''}`}
-              >
-                👤 Clientes
-              </button>
-              <button 
-                onClick={() => setSeccion('productos')} 
-                className={`nav-btn ${seccion === 'productos' ? 'active' : ''}`}
-              >
-                📦 Productos
-              </button>
-              <button 
-                onClick={() => setSeccion('reportes')} 
-                className={`nav-btn ${seccion === 'reportes' ? 'active' : ''}`}
-              >
-                📈 Reportes
-              </button>
-              <button 
-                onClick={() => setSeccion('perfil')} 
-                className={`nav-btn ${seccion === 'perfil' ? 'active' : ''}`}
-              >
-                👤 Mi Perfil
-              </button>
-            </>
+            <button 
+              onClick={() => setSeccion('perfil')} 
+              className={`nav-btn ${seccion === 'perfil' ? 'active' : ''}`}
+            >
+              👤 Mi Perfil
+            </button>
           )}
         </nav>
       </div>
 
       <main style={{ minHeight: '80vh', padding: '0 8px 32px' }}>
-        {seccion === 'almacenes' && usuario.rol === 'admin' && <Almacenes usuario={usuario} />}
-        {seccion === 'dashboard' && <Dashboard usuario={usuario} onNavigate={setSeccion} />}
-        {seccion === 'usuarios' && (usuario.rol === 'admin' || usuario.rol === 'admin_pos') && <Users usuario={usuario} />}
-        {seccion === 'clientes' && (usuario.rol === 'admin' || usuario.rol === 'vendedor' || usuario.rol === 'admin_pos') && <Clientes usuario={usuario} />}
-        {seccion === 'productos' && (usuario.rol === 'admin' || usuario.rol === 'vendedor' || usuario.rol === 'admin_pos') && <Productos usuario={usuario} />}
-        {seccion === 'ventas' && (usuario.rol === 'admin' || usuario.rol === 'vendedor' || usuario.rol === 'admin_pos') && <Ventas usuario={usuario} />}
-        {seccion === 'caja' && (usuario.rol === 'admin' || usuario.rol === 'vendedor' || usuario.rol === 'admin_pos') && <Caja usuario={usuario} />}
-        {seccion === 'facturacion' && (usuario.rol === 'admin' || usuario.rol === 'admin_pos') && <Facturacion usuario={usuario} />}
-        {seccion === 'reportes' && (usuario.rol === 'admin' || usuario.rol === 'vendedor' || usuario.rol === 'admin_pos') && <Reportes usuario={usuario} />}
-        {seccion === 'empresa' && usuario.rol === 'admin' && <EmpresaForm />}
+        {seccion === 'dashboard' && puede(usuario, ['dashboard.ver', 'dashboard.stock']) && <Dashboard usuario={usuario} onNavigate={setSeccion} />}
+        {seccion === 'ventas' && puede(usuario, 'ventas.crear') && <Ventas usuario={usuario} onNavigate={setSeccion} />}
+        {seccion === 'facturacion' && puede(usuario, 'facturas.crear') && <Facturacion usuario={usuario} onNavigate={setSeccion} />}
+        {seccion === 'cartera' && puede(usuario, 'cartera.ver') && <Cartera usuario={usuario} />}
+        {seccion === 'caja' && puede(usuario, 'caja.operar') && <Caja usuario={usuario} />}
+        {seccion === 'productos' && puede(usuario, 'productos.ver') && <Productos usuario={usuario} />}
+        {seccion === 'clientes' && puede(usuario, ['clientes.crear', 'clientes.editar']) && <Clientes usuario={usuario} />}
+        {seccion === 'usuarios' && puede(usuario, 'usuarios.gestionar_vendedores') && <Users usuario={usuario} />}
+        {seccion === 'almacenes' && puede(usuario, 'almacenes.gestionar') && <Almacenes usuario={usuario} onNavigate={setSeccion} />}
+        {seccion === 'reportes' && puede(usuario, ['reportes.ver', 'reportes.ver_propios']) && <Reportes usuario={usuario} />}
+        {seccion === 'empresa' && puede(usuario, 'empresa.editar') && <EmpresaForm />}
         {seccion === 'perfil' && usuario.rol === 'vendedor' && <PerfilVendedor usuario={usuario} />}
       </main>
 

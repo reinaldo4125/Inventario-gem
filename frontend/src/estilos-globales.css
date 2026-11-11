@@ -131,3 +131,39 @@
   font-size: 13px;
   margin-left: 4px;
 }
+
+/* --- REGLAS DE IMPRESIÓN OFICIAL (FACTURAS, RECIBOS Y TICKETS) --- */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .no-print,
+  .btn,
+  button,
+  .modal-backdrop > div:not(.modal-card),
+  nav,
+  header,
+  aside,
+  .sidebar {
+    display: none !important;
+  }
+  .modal-backdrop {
+    position: static !important;
+    background: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+  }
+  .modal-card {
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+}

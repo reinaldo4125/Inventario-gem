@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api from './api';
 import { downloadTemplateClientesCSV, parseCSVText } from './utils/csvImportHelper';
+import { hoyColombia } from './utils/formatters';
+import { puede } from './config/permisos';
 import { 
   MdPerson, 
   MdBusiness, 
@@ -314,7 +316,7 @@ function Clientes({ usuario }) {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Clientes');
     const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     const fileData = new Blob([excelBuffer], { type: 'application/octet-stream' });
-    saveAs(fileData, `Reporte_Clientes_${new Date().toISOString().slice(0,10)}.xlsx`);
+    saveAs(fileData, `Reporte_Clientes_${hoyColombia()}.xlsx`);
   };
 
   // Exportar PDF
@@ -335,7 +337,7 @@ function Clientes({ usuario }) {
         c.activo !== false ? 'Activo' : 'Inactivo'
       ])
     });
-    savePdf(doc, `Reporte_Clientes_${new Date().toISOString().slice(0,10)}.pdf`);
+    savePdf(doc, `Reporte_Clientes_${hoyColombia()}.pdf`);
   };
 
   // Paginación
@@ -1017,7 +1019,7 @@ function Clientes({ usuario }) {
             </select>
           </div>
 
-          {usuario && usuario.rol === 'admin' && (
+          {puede(usuario, 'almacenes.gestionar') && (
             <div>
               <select 
                 value={filtroAlmacen} 
@@ -1178,7 +1180,7 @@ function Clientes({ usuario }) {
                         <MdEdit size={14} /> Editar
                       </button>
 
-                      {usuario && usuario.rol === 'admin' && (
+                      {puede(usuario, 'clientes.borrar') && (
                         <button 
                           onClick={() => handleDelete(c.id)} 
                           title="Eliminar cliente" 

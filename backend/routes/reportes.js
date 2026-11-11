@@ -7,14 +7,19 @@ const Cliente = require('../models/Cliente');
 const DetalleVenta = require('../models/DetalleVenta');
 const sequelize = require('../database/sequelize');
 const Producto = require('../models/Producto');
-const { authRole, authToken } = require('./auth');
+const auth = require('../middleware/auth');
+const requirePermiso = require('../middleware/roles');
+const { almacenDelUsuario, sanitizarCostos } = require('../utils/almacenScope');
 
 // Reporte: ganancia por producto por almacén (monto y %)
-router.get('/ganancia-producto', authRole(['admin']), async (req, res) => {
+router.get('/ganancia-producto', auth, requirePermiso('costos.ver'), async (req, res) => {
   try {
     // Evitar respuestas en cache (304) para que la API siempre devuelva datos frescos
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    const { desde, hasta, almacenId, productoId } = req.query;
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && req.user.rol !== 'admin') return;
+    const { desde, hasta, productoId } = req.query;
+    const almacenId = scopedAlmacenId || req.query.almacenId;
     // pagination / sorting / export
     const page = parseInt(req.query.page) || 1;
     const pageSize = Math.min(parseInt(req.query.pageSize) || 10, 500);
@@ -93,6 +98,7 @@ router.get('/ganancia-producto', authRole(['admin']), async (req, res) => {
       AND (:hasta IS NULL OR v.fecha <= :hasta)
       AND (:almacenId IS NULL OR v.almacenId = :almacenId)
       AND (:productoId IS NULL OR dv.productoId = :productoId)
+      AND v.estado = 'Pagada'
     GROUP BY dv.productoId, v.almacenId
     ORDER BY p.nombre, v.almacenId`;
 
@@ -115,12 +121,6 @@ router.get('/ganancia-producto', authRole(['admin']), async (req, res) => {
     }
 
     const rows = await sequelize.query(finalSql, { replacements, type: sequelize.QueryTypes.SELECT });
-    // Debug: mostrar muestra de filas para verificar que ventas_total_neto está presente
-    try {
-      console.log('>>> [ganancia-producto] filas ejemplo:', JSON.stringify(rows.slice(0,10), null, 2));
-    } catch (e) {
-      console.log('>>> [ganancia-producto] Error al serializar rows para debug', e && e.message);
-    }
     res.json({ rows, total: totalCount });
   } catch (error) {
     console.error('[ganancia-producto] Error:', error);
@@ -129,24 +129,24 @@ router.get('/ganancia-producto', authRole(['admin']), async (req, res) => {
 });
 
 // Ventas pendientes vs facturadas por día
-router.get('/ventas-pendientes-vs-facturadas', authToken, async (req, res) => {
+router.get('/ventas-pendientes-vs-facturadas', auth, requirePermiso(['reportes.ver', 'reportes.ver_propios']), async (req, res) => {
   try {
     const { desde, hasta, vendedor, cliente } = req.query;
-    // respetar rol: vendedores y admin_pos solo verán su almacén
     const user = req.user || {};
-    let almacenId = req.query.almacenId;
-    if (user.rol === 'vendedor' || user.rol === 'admin_pos') {
-      almacenId = user.almacenId;
-    }
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && user.rol !== 'admin') return;
+
     const where = {};
     if (desde || hasta) {
       where.fecha = {};
       if (desde) where.fecha[Op.gte] = new Date(desde);
       if (hasta) where.fecha[Op.lte] = new Date(hasta);
     }
-    if (almacenId) where.almacenId = almacenId;
-    // aplicar filtro por vendedor/cliente cuando sean provistos
-    if (user.rol === 'admin' || user.rol === 'admin_pos') {
+    if (scopedAlmacenId) where.almacenId = scopedAlmacenId;
+
+    if (user.rol === 'vendedor') {
+      where.vendedor = user.nombre;
+    } else {
       if (vendedor) where.vendedor = vendedor;
       if (cliente) where.clienteId = cliente;
     }
@@ -174,20 +174,23 @@ router.get('/ventas-pendientes-vs-facturadas', authToken, async (req, res) => {
         resumen[dia][estado] = cantidad;
       }
     });
-    res.json(resumen);
+    res.json(sanitizarCostos(resumen, req.user));
   } catch (error) {
     res.status(500).json({ error: 'Error al generar reporte de pendientes vs facturadas' });
   }
 });
 
 // Ventas agrupadas por tipo de cliente
-router.get('/ventas-por-tipo-cliente', authToken, async (req, res) => {
+router.get('/ventas-por-tipo-cliente', auth, requirePermiso(['reportes.ver', 'reportes.ver_propios']), async (req, res) => {
   try {
     const user = req.user || {};
-    const where = {};
-    let almacenId = req.query.almacenId;
-    if (user.rol === 'vendedor') almacenId = user.almacenId;
-    if (almacenId) where.almacenId = almacenId;
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && user.rol !== 'admin') return;
+
+    const where = { estado: 'Pagada' };
+    if (scopedAlmacenId) where.almacenId = scopedAlmacenId;
+    if (user.rol === 'vendedor') where.vendedor = user.nombre;
+
     const ventas = await Venta.findAll({
       where,
       include: [{ model: Cliente, attributes: ['tipo_cliente'] }]
@@ -203,7 +206,7 @@ router.get('/ventas-por-tipo-cliente', authToken, async (req, res) => {
       resumen[tipo].total += neto;
       resumen[tipo].cantidad++;
     });
-    res.json(resumen);
+    res.json(sanitizarCostos(resumen, req.user));
   } catch (error) {
     res.status(500).json({ error: 'Error al generar reporte por tipo de cliente' });
   }
@@ -211,32 +214,26 @@ router.get('/ventas-por-tipo-cliente', authToken, async (req, res) => {
 
 
 // Reporte avanzado: Ventas agrupadas y filtradas
-router.get('/ventas-agrupadas', authToken, async (req, res) => {
+router.get('/ventas-agrupadas', auth, requirePermiso(['reportes.ver', 'reportes.ver_propios']), async (req, res) => {
   try {
     const { desde, hasta, tipo_cliente, vendedor: vendedorQuery, producto, agrupacion } = req.query;
     const user = req.user || {};
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && user.rol !== 'admin') return;
+
     const whereVenta = { estado: 'Pagada' };
     if (desde || hasta) {
       whereVenta.fecha = {};
       if (desde) whereVenta.fecha[Op.gte] = new Date(desde);
       if (hasta) whereVenta.fecha[Op.lte] = new Date(hasta);
     }
-    // Si es vendedor o admin_pos, forzar filtro a su almacén
+    if (scopedAlmacenId) {
+      whereVenta.almacenId = scopedAlmacenId;
+    }
     if (user.rol === 'vendedor') {
-      if (user.almacenId) {
-        whereVenta.almacenId = user.almacenId;
-      } else if (user.nombre) {
-        whereVenta.vendedor = user.nombre;
-      }
-    } else if (user.rol === 'admin_pos') {
-      if (user.almacenId) {
-        whereVenta.almacenId = user.almacenId;
-      }
-      if (vendedorQuery) whereVenta.vendedor = vendedorQuery;
-    } else {
-      // Admin global u otros roles pueden pasar filtros
-      if (vendedorQuery) whereVenta.vendedor = vendedorQuery;
-      if (req.query.almacenId) whereVenta.almacenId = req.query.almacenId;
+      whereVenta.vendedor = user.nombre;
+    } else if (vendedorQuery) {
+      whereVenta.vendedor = vendedorQuery;
     }
 
     // Para tipo_cliente, se filtra en include
@@ -291,7 +288,10 @@ router.get('/ventas-agrupadas', authToken, async (req, res) => {
         [DetalleVenta.sequelize.fn('SUM', DetalleVenta.sequelize.col('precio_unitario')), 'total']
       ];
       group = ['productoId'];
-      include = [{ model: Producto, attributes: ['nombre'] }];
+      include = [
+        { model: Producto, attributes: ['nombre'] },
+        { model: Venta, where: whereVenta, attributes: [] }
+      ];
       raw = false;
     } else {
       // Default: tipo_cliente
@@ -318,16 +318,12 @@ router.get('/ventas-agrupadas', authToken, async (req, res) => {
     }
 
     const result = await model.findAll({
-      where: whereVenta,
+      where: agrupacion === 'producto' ? undefined : whereVenta,
       attributes,
       group,
       include,
       raw
     });
-
-    console.log('>>> [ventas-agrupadas] agrupacion:', agrupacion);
-    console.log('>>> [ventas-agrupadas] whereVenta:', whereVenta);
-    console.log('>>> [ventas-agrupadas] result:', JSON.stringify(result, null, 2));
 
     // Formatear respuesta para frontend
     let resumen = {};
@@ -363,7 +359,6 @@ router.get('/ventas-agrupadas', authToken, async (req, res) => {
       });
     }
 
-    console.log('>>> [ventas-agrupadas] resumen:', resumen);
     res.json(resumen);
   } catch (error) {
     console.error(error);

@@ -3,7 +3,15 @@ const sequelize = require('../database/sequelize');
 const Producto = require('./Producto');
 
 
+const crypto = require('crypto');
+
 const Venta = sequelize.define('Venta', {
+  token_publico: {
+    type: DataTypes.STRING(64),
+    allowNull: true,
+    unique: true,
+    defaultValue: () => crypto.randomUUID()
+  },
   almacenId: {
     type: DataTypes.INTEGER,
     allowNull: false,
@@ -69,10 +77,29 @@ const Venta = sequelize.define('Venta', {
       model: 'facturas',
       key: 'id'
     }
+  },
+  anuladaPor: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  motivoAnulacion: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  fechaAnulacion: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   tableName: 'ventas',
-  timestamps: true
+  timestamps: true,
+  hooks: {
+    beforeCreate: (inst) => {
+      if (!inst.token_publico) {
+        inst.token_publico = crypto.randomUUID();
+      }
+    }
+  }
 });
 
 const Cliente = require('./Cliente');

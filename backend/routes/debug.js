@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const requireRole = require('../middleware/roles');
 const sequelize = require('../database/sequelize');
 const { 
   Cliente, Producto, Venta, DetalleVenta, Factura, 
@@ -10,15 +11,18 @@ const { Op } = require('sequelize');
 const fs = require('fs');
 const path = require('path');
 
+// Proteger todas las rutas de diagnóstico y pruebas exclusivamente para administradores
+router.use(auth, requireRole('admin'));
+
 // Endpoint diagnóstico: devuelve req.user y el token recibido
-router.get('/whoami', auth, (req, res) => {
+router.get('/whoami', auth, requireRole('admin'), (req, res) => {
   const authHeader = req.headers.authorization || req.headers.Authorization || '';
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
   res.json({ user: req.user || null, token });
 });
 
 // Estadísticas actuales de la Base de Datos
-router.get('/db-stats', auth, async (req, res) => {
+router.get('/db-stats', auth, requireRole('admin'), async (req, res) => {
   try {
     const counts = {
       clientes: await Cliente.count(),
@@ -57,7 +61,7 @@ router.get('/db-stats', auth, async (req, res) => {
 });
 
 // Generador de Carga / Prueba de Estrés (Seed en Lote)
-router.post('/seed-stress', auth, async (req, res) => {
+router.post('/seed-stress', auth, requireRole('admin'), async (req, res) => {
   const inicioTime = Date.now();
   try {
     const { 
@@ -220,7 +224,7 @@ router.post('/seed-stress', auth, async (req, res) => {
 });
 
 // Benchmark de Consultas de Alto Rendimiento
-router.get('/benchmark', auth, async (req, res) => {
+router.get('/benchmark', auth, requireRole('admin'), async (req, res) => {
   const resultados = [];
 
   const medir = async (nombre, fn) => {
@@ -280,7 +284,7 @@ router.get('/benchmark', auth, async (req, res) => {
 });
 
 // Limpiar todos los datos generados durante las Pruebas de Estrés
-router.delete('/clean-stress', auth, async (req, res) => {
+router.delete('/clean-stress', auth, requireRole('admin'), async (req, res) => {
   try {
     // 1. Identificar Clientes de prueba
     const clientesTest = await Cliente.findAll({

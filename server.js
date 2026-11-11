@@ -1,9 +1,12 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
 
-process.env.PORT = process.env.PORT || '3000';
+// AI Studio dev server runs on port 3000 (nginx listens on 8080 inside container)
+const PORT = 3000;
+process.env.PORT = '3000';
 process.env.TRUST_PROXY = '1';
 
 // Ensure uploads folder exists
@@ -18,6 +21,20 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Frontend build path
 const frontendBuildPath = path.join(__dirname, 'frontend', 'build');
+
+// Ensure frontend build directory exists and has index.html
+if (!fs.existsSync(path.join(frontendBuildPath, 'index.html'))) {
+  console.log('[AI Studio] Compilando interfaz de usuario (build de producción)...');
+  try {
+    const hasScripts = fs.existsSync(path.join(__dirname, 'frontend', 'node_modules', 'react-scripts'));
+    const buildCmd = hasScripts 
+      ? 'npm --prefix frontend run build' 
+      : 'npm --prefix frontend install --legacy-peer-deps && npm --prefix frontend run build';
+    execSync(buildCmd, { stdio: 'inherit' });
+  } catch (err) {
+    console.error('[AI Studio] Error compilando frontend:', err);
+  }
+}
 
 // Load Express backend app
 const app = require('./backend/app');
@@ -40,8 +57,14 @@ app.use((req, res, next) => {
     req.path.startsWith('/productos') ||
     req.path.startsWith('/ventas') ||
     req.path.startsWith('/facturas') ||
+    req.path.startsWith('/cartera') ||
     req.path.startsWith('/clientes') ||
     req.path.startsWith('/almacenes') ||
+    req.path.startsWith('/caja') ||
+    req.path.startsWith('/reportes') ||
+    req.path.startsWith('/kardex') ||
+    req.path.startsWith('/traslados') ||
+    req.path.startsWith('/dashboard') ||
     req.path.startsWith('/empresa') ||
     req.path.startsWith('/producto-costos') ||
     req.path.startsWith('/uploads') ||
@@ -85,7 +108,6 @@ app.use((req, res, next) => {
   `);
 });
 
-const PORT = parseInt(process.env.PORT, 10) || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[AI Studio] Servidor unificado escuchando en http://0.0.0.0:${PORT}`);
 });

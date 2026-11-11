@@ -1,15 +1,25 @@
 const express = require('express');
 const router = express.Router();
 const { Kardex, Producto, Almacen, ProductoAlmacen } = require('../models');
-const { authRole } = require('../middleware/auth');
+const auth = require('../middleware/auth');
+const requirePermiso = require('../middleware/roles');
+const { almacenDelUsuario } = require('../utils/almacenScope');
 const sequelize = require('../database/sequelize');
 
 // Obtener Kardex de un producto
-router.get('/producto/:id', authRole(['admin', 'vendedor']), async (req, res) => {
+router.get('/producto/:id', auth, requirePermiso('kardex.ver'), async (req, res) => {
   try {
     const { id } = req.params;
+    const scopedAlmacenId = almacenDelUsuario(req, res);
+    if (scopedAlmacenId === undefined && req.user.rol !== 'admin') return;
+
+    const where = { productoId: id };
+    if (scopedAlmacenId) {
+      where.almacenId = scopedAlmacenId;
+    }
+
     const movimientos = await Kardex.findAll({
-      where: { productoId: id },
+      where,
       include: [
         { model: Almacen, attributes: ['id', 'nombre'] },
         { model: Producto, attributes: ['id', 'nombre', 'codigo_oem'] }
@@ -25,11 +35,17 @@ router.get('/producto/:id', authRole(['admin', 'vendedor']), async (req, res) =>
 });
 
 // Registrar ajuste manual en Kardex
-router.post('/ajuste', authRole(['admin']), async (req, res) => {
+router.post('/ajuste', auth, requirePermiso('stock.ajustar'), async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { productoId, almacenId, tipo, cantidad, observaciones } = req.body;
     const usuarioNombre = req.user ? (req.user.nombre || req.user.correo) : 'Admin';
+    const targetAlmacenId = req.user.rol === 'admin' ? (almacenId || 1) : req.user.almacenId;
+
+    if (req.user.rol !== 'admin' && Number(targetAlmacenId) !== Number(req.user.almacenId)) {
+      await t.rollback();
+      return res.status(403).json({ error: 'Solo puede registrar ajustes de stock en su sede asignada' });
+    }
 
     const prod = await Producto.findByPk(productoId, { transaction: t });
     if (!prod) {
@@ -37,7 +53,6 @@ router.post('/ajuste', authRole(['admin']), async (req, res) => {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
 
-    const targetAlmacenId = almacenId || 1;
     let pa = await ProductoAlmacen.findOne({
       where: { productoId, almacenId: targetAlmacenId },
       transaction: t

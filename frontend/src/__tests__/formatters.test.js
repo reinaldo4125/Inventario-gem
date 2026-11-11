@@ -13,14 +13,14 @@ describe('formatters - parsePrecio', () => {
     expect(parsePrecio('1500,5')).toBe(1500.5);
   });
 
-  test('valor vacío o inválido devuelve fallback positivo', () => {
-    expect(parsePrecio('')).toBe(0.01);
-    expect(parsePrecio(null)).toBe(0.01);
-    expect(parsePrecio('abc')).toBe(0.01);
+  test('valor vacío o inválido devuelve null', () => {
+    expect(parsePrecio('')).toBe(null);
+    expect(parsePrecio(null)).toBe(null);
+    expect(parsePrecio('abc')).toBe(null);
   });
 
-  test('valores negativos retornan fallback mínimo', () => {
-    expect(parsePrecio('-5')).toBe(0.01);
+  test('valores negativos retornan null', () => {
+    expect(parsePrecio('-5')).toBe(null);
   });
 });
 
