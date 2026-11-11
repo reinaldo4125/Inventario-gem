@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-let pkg = { version: '1.0.0', description: 'Sistema de gestión de inventarios, ventas y facturación' };
+let pkg = { version: '1.1.0', description: 'Sistema de gestión de inventarios, ventas y facturación' };
 try {
   pkg = require('../package.json');
 } catch (e) {
@@ -14,7 +14,7 @@ try {
 router.get('/', (req, res) => {
   res.json({
     nombre: 'Multinyectores',
-    version: pkg.version || '1.0.0',
+    version: pkg.version || '1.1.0',
     descripcion: pkg.description || 'Sistema de gestión de inventarios, ventas y facturación',
     entorno: process.env.NODE_ENV || 'production',
     uptime: Math.floor(process.uptime()),

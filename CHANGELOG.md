@@ -4,6 +4,28 @@ Todas las versiones notables de este proyecto se documentarán en este archivo s
 
 ---
 
+## [1.1.0] - 2026-11-10
+### Seguridad
+- Eliminadas contraseñas maestras de administrador y el reinicio automático de contraseñas al arrancar el servidor.
+- Contraseñas y claves JWT solo desde variables de entorno; rutas de depuración desactivadas en producción; sin source maps públicos.
+- Comprobantes públicos de ventas, facturas y recibos con código único (token) en vez de número consecutivo.
+- Control de sede en consultas de ventas, facturas, cartera y reportes.
+### Perfiles y permisos
+- Permisos centralizados para Administrador General, Administrador de Punto, Vendedor y Encargado de Almacén.
+- El Administrador de Punto opera solo su sede, sin ver costos ni ganancias.
+### Ventas, facturación y caja
+- Fechas y horas en zona horaria de Colombia.
+- Las facturas y ventas ya no se eliminan: se anulan con motivo, usuario y fecha.
+- Cliente por defecto CONSUMIDOR FINAL (222222222222).
+- Caja abierta obligatoria para ventas, facturas y cobros en efectivo.
+### Inventario y reportes
+- Stock crítico con una sola regla en todo el sistema.
+- Valoración del inventario a costo y a precio de venta, con alerta de productos sin costo.
+- Los servicios ya no manejan existencias.
+- Los reportes excluyen ventas anuladas; corregidos los totales del Dashboard.
+
+---
+
 ## [1.0.0] - 2026-08-19
 ### 🚀 Lanzamiento Inicial y Funcionalidades Principales
 - **Módulo de Inventario**: Gestión de productos, repuestos de inyección electrónica, categorías, precios detal/mayor/almacén y control de almacenes.

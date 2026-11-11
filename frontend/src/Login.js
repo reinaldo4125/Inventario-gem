@@ -39,10 +39,12 @@ function Login({ onLogin }) {
     setNotice('');
     setLoading(true);
     try {
+      const cleanCorreo = String(correo || '').trim();
+      const cleanPassword = String(password || '').trim();
       const res = await fetch('/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ correo, password })
+        body: JSON.stringify({ correo: cleanCorreo, password: cleanPassword })
       });
       if (!res.ok) {
         let errorMsg = '';
@@ -75,10 +77,21 @@ function Login({ onLogin }) {
         decoded = JSON.parse(jsonPayload);
       } catch {}
 
+      const userObj = {
+        id: decoded?.id || data.id,
+        nombre: decoded?.nombre || data.nombre || '',
+        rol: decoded?.rol || data.rol || '',
+        correo: decoded?.correo || data.correo || '',
+        token: data.token,
+        refreshToken: data.refreshToken,
+        almacenId: decoded?.almacenId || data.almacenId,
+        almacen: decoded?.almacen || data.almacen
+      };
+
       if (auth && auth.login) {
-        auth.login({ token: data.token, refreshToken: data.refreshToken, id: decoded?.id, nombre: decoded?.nombre, rol: decoded?.rol, correo: decoded?.correo, almacenId: decoded?.almacenId, almacen: decoded?.almacen });
+        auth.login(userObj);
       }
-      if (onLogin) onLogin({ id: decoded?.id, nombre: decoded?.nombre || '', rol: decoded?.rol || '', correo: decoded?.correo || '', token: data.token, almacenId: decoded?.almacenId, almacen: decoded?.almacen });
+      if (onLogin) onLogin(userObj);
     } catch (err) {
       if (err && err.message && err.message.includes('Failed to fetch')) {
         setError('No se pudo conectar al servidor. Verifica tu conexión.');
@@ -123,6 +136,9 @@ function Login({ onLogin }) {
               placeholder="admin" 
               value={correo} 
               onChange={e => setCorreo(e.target.value)} 
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck="false"
               required 
               style={{width:'100%',padding:'10px 12px',borderRadius:'6px',border:'1px solid #cbd5e1',fontSize:'14px',outline:'none',boxSizing:'border-box'}} 
             />
@@ -136,6 +152,9 @@ function Login({ onLogin }) {
                 placeholder="••••••••" 
                 value={password} 
                 onChange={e => setPassword(e.target.value)} 
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck="false"
                 required 
                 style={{width:'100%',padding:'10px 40px 10px 12px',borderRadius:'6px',border:'1px solid #cbd5e1',fontSize:'14px',outline:'none',boxSizing:'border-box'}} 
               />

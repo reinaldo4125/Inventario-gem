@@ -4,6 +4,7 @@ const Usuario = require('../models/Usuario');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
+const sequelize = require('../database/sequelize');
 
 if (!process.env.JWT_SECRET) {
   console.error("Falta JWT_SECRET en .env");
@@ -22,14 +23,17 @@ router.post('/login', async (req, res) => {
   const { correo, password, usuario: reqUsuario, username, contrasena, clave } = req.body || {};
   const identifier = (correo || reqUsuario || username || '').trim();
   const rawPassword = password || contrasena || clave || '';
+  const trimmedPassword = rawPassword.trim();
+
   try {
     let usuario;
     try {
+      const lower = identifier.toLowerCase();
       const searchConditions = [
-        { correo: identifier },
-        { nombre: identifier }
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('Usuario.correo')), lower),
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('Usuario.nombre')), lower)
       ];
-      if (identifier.toLowerCase() === 'admin') {
+      if (lower === 'admin' || lower === 'administrador') {
         searchConditions.push({ correo: 'admin@admin.com' });
         searchConditions.push({ rol: 'admin' });
       }
@@ -53,7 +57,14 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Su cuenta de usuario se encuentra desactivada. Contacte al administrador.' });
     }
 
-    const isValidPassword = Boolean(usuario.password && (await bcrypt.compare(rawPassword, usuario.password)));
+    const isValidPassword = Boolean(
+      usuario.password && (
+        (await bcrypt.compare(rawPassword, usuario.password)) ||
+        (await bcrypt.compare(trimmedPassword, usuario.password)) ||
+        (await bcrypt.compare(rawPassword.toLowerCase(), usuario.password)) ||
+        (await bcrypt.compare(trimmedPassword.toLowerCase(), usuario.password))
+      )
+    );
 
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Credenciales incorrectas' });
@@ -71,7 +82,8 @@ router.post('/login', async (req, res) => {
       nombre: usuario.nombre,
       correo: usuario.correo,
       almacenId: usuario.almacenId,
-      almacenNombre: almacen ? almacen.nombre : null
+      almacenNombre: almacen ? almacen.nombre : null,
+      almacen: almacen
     }, JWT_SECRET, { expiresIn: '8h' });
     // Crear refresh token y guardarlo en la BD
     const refreshToken = jwt.sign({ id: usuario.id }, REFRESH_SECRET, { expiresIn: '7d' });

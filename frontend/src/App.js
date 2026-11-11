@@ -50,7 +50,7 @@ function App() {
   const [seccion, setSeccion] = useState('dashboard');
   const [usuario, setUsuario] = useState(null);
   const [empresa, setEmpresa] = useState(null);
-  const [appVersion, setAppVersion] = useState('1.0.0');
+  const [appVersion, setAppVersion] = useState('1.1.0');
   // If AuthContext is provided, use it for login/logout
   let authContext = null;
   try { authContext = require('./AuthContext').AuthContext; } catch {}

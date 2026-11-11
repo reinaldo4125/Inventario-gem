@@ -1,12 +1,11 @@
 {
   "name": "multinyectores",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
     "lint": "echo \"No lint errors\"",
-    "build": "([ -d frontend/node_modules/react-scripts ] || npm --prefix frontend install --legacy-peer-deps) && npm --prefix frontend run build",
-    "postinstall": "([ -f frontend/build/index.html ] || npm run build)"
+    "build": "([ -d frontend/node_modules/react-scripts ] || npm --prefix frontend install --legacy-peer-deps) && npm --prefix frontend run build"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
