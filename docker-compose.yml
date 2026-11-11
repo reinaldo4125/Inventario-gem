@@ -7,7 +7,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: multinyectores
     ports:
-      - '3306:3306'
+      - '127.0.0.1:3306:3306'
     volumes:
       - db_data:/var/lib/mysql
 
@@ -17,7 +17,7 @@ services:
       dockerfile: Dockerfile.backend
     restart: always
     ports:
-      - '4000:4000'
+      - '127.0.0.1:4000:4000'
     environment:
       - NODE_ENV=production
       - PORT=4000
@@ -25,6 +25,8 @@ services:
       - DB_USER=root
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=multinyectores
+      - JWT_SECRET=${JWT_SECRET}
+      - REFRESH_SECRET=${REFRESH_SECRET}
     depends_on:
       - db
 
@@ -34,7 +36,7 @@ services:
       dockerfile: Dockerfile.frontend
     restart: always
     ports:
-      - '3002:80'
+      - '127.0.0.1:3002:80'
     depends_on:
       - backend
 
